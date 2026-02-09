@@ -78,5 +78,3 @@ export default function PublicViewer({ token }) {
     </div>
   );
 };
-
-export default PublicViewer;
