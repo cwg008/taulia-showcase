@@ -1,67 +1,15 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:16.6-alpine
-    container_name: taulia_showcase_db
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+  web:
+    build: .
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - taulia_network
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: taulia_showcase_app
-    depends_on:
-      db:
-        condition: service_healthy
+      - ./server/uploads:/app/server/uploads
     environment:
       - NODE_ENV=production
-      - PORT=${PORT:-3001}
-      - DB_CLIENT=pg
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRY=${JWT_EXPIRY:-24h}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_FROM=${SMTP_FROM:-noreply@taulia.com}
-      - CLIENT_URL=${CLIENT_URL:-http://localhost:3001}
-    ports:
-      - "${PORT:-3001}:3001"
-    volumes:
-      - prototype_uploads:/app/server/uploads
-    networks:
-      - taulia_network
+      - HOST=0.0.0.0
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-
-volumes:
-  postgres_data:
-    driver: local
-  prototype_uploads:
-    driver: local
-
-networks:
-  taulia_network:
-    driver: bridge

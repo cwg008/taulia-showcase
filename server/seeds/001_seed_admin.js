@@ -1,82 +1,86 @@
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 
 exports.seed = async function(knex) {
-  // Truncate tables in correct order
-  await knex('feedback').del().catch(() => {});
-  await knex('link_views').del();
-  await knex('magic_links').del();
-  await knex('prototypes').del();
-  await knex('audit_logs').del();
-  await knex('users').del();
+  // Check if admin already exists
+  const adminExists = await knex('users').where('email', 'admin@taulia.com').first();
+  if (adminExists) {
+    return;
+  }
 
-  // Hash passwords
-  const adminPasswordHash = await bcrypt.hash('T@ulia2025!', 12);
-  const prospectPasswordHash = await bcrypt.hash('Prospect2025!', 12);
+  const adminId = 'admin-001';
+  const password = await bcrypt.hash('admin123', 10);
 
   // Insert admin user
-  const [adminUserId] = await knex('users').insert({
+  await knex('users').insert({
+    id: adminId,
     email: 'admin@taulia.com',
-    password_hash: adminPasswordHash,
-    name: 'Taulia Admin',
+    name: 'Admin User',
+    password_hash: password,
     role: 'admin',
     is_active: true,
-  });
-
-  // Insert prospect (customer) user
-  const [prospectUserId] = await knex('users').insert({
-    email: 'prospect@acme.com',
-    password_hash: prospectPasswordHash,
-    name: 'Jordan Rivera',
-    role: 'prospect',
-    is_active: true,
+    invite_token: null,
+    created_at: new Date(),
+    updated_at: new Date(),
   });
 
   // Insert sample prototypes
-  const [proto1Id] = await knex('prototypes').insert({
-    title: 'Early Payment Offers Redesign',
-    description: 'New UI for the early payment offers workflow with improved filtering and batch actions.',
-    slug: 'early-payment-offers-redesign',
-    status: 'published',
-    type: 'html',
-    file_path: 'prototypes/1/index.html',
-    version: '1.0',
-    created_by: adminUserId,
-  });
+  const proto1Id = 'proto-001';
+  const proto2Id = 'proto-002';
 
-  const [proto2Id] = await knex('prototypes').insert({
-    title: 'Supplier Portal Dashboard',
-    description: 'Redesigned supplier portal with real-time payment status tracking and analytics.',
-    slug: 'supplier-portal-dashboard',
-    status: 'published',
-    type: 'html',
-    file_path: 'prototypes/2/index.html',
-    version: '0.9',
-    created_by: adminUserId,
-  });
-
-  // Create magic links shared with the prospect
-  const token1 = crypto.randomBytes(32).toString('hex');
-  const token2 = crypto.randomBytes(32).toString('hex');
-
-  await knex('magic_links').insert([
+  await knex('prototypes').insert([
     {
-      token: token1,
-      prototype_id: proto1Id,
-      label: 'Acme Corp - Early Payment Demo',
-      created_by: adminUserId,
-      recipient_email: 'prospect@acme.com',
-      is_revoked: false,
-      view_count: 0,
+      id: proto1Id,
+      title: 'Early Payment Dashboard',
+      description: 'Interactive dashboard for early payment solutions',
+      slug: 'early-payment-dashboard',
+      status: 'published',
+      type: 'prototype',
+      file_path: '/uploads/prototypes/proto-001/index.html',
+      thumbnail_path: null,
+      version: 1,
+      created_by: adminId,
+      created_at: new Date(),
+      updated_at: new Date(),
     },
     {
-      token: token2,
-      prototype_id: proto2Id,
-      label: 'Acme Corp - Supplier Portal Preview',
-      created_by: adminUserId,
-      recipient_email: 'prospect@acme.com',
+      id: proto2Id,
+      title: 'Supplier Portal Redesign',
+      description: 'New supplier portal interface with improved UX',
+      slug: 'supplier-portal-redesign',
+      status: 'published',
+      type: 'prototype',
+      file_path: '/uploads/prototypes/proto-002/index.html',
+      thumbnail_path: null,
+      version: 1,
+      created_by: adminId,
+      created_at: new Date(),
+      updated_at: new Date(),
+    },
+  ]);
+
+  // Insert sample magic links
+  await knex('magic_links').insert([
+    {
+      id: 'link-001',
+      token: require('crypto').randomBytes(32).toString('hex'),
+      prototype_id: proto1Id,
+      label: 'Client Demo - Early Payment',
+      created_by: adminId,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       is_revoked: false,
       view_count: 0,
+      created_at: new Date(),
+    },
+    {
+      id: 'link-002',
+      token: require('crypto').randomBytes(32).toString('hex'),
+      prototype_id: proto2Id,
+      label: 'Supplier Review - Portal Redesign',
+      created_by: adminId,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      is_revoked: false,
+      view_count: 0,
+      created_at: new Date(),
     },
   ]);
 };

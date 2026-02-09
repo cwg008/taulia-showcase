@@ -1,209 +1,192 @@
 const express = require('express');
-const router = express.Router();
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { db } = require('../config/database');
+const { body, validationResult } = require('express-validator');
+const db = require('../config/database');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const { sendInviteEmail } = require('../services/emailService');
+const { createAuditLog } = require('../middleware/auditLog');
 
-// All admin routes require authentication
-router.use(authenticate);
-router.use(requireAdmin);
+const router = express.Router();
 
-// GET /api/admin/users - List all admin users
-router.get('/users', async (req, res) => {
+// GET /users
+router.get('/users', authenticate, requireAdmin, async (req, res) => {
   try {
-    const users = await db('users')
-      .select('id', 'email', 'name', 'role', 'is_active', 'invite_token', 'created_at')
-      .orderBy('created_at', 'desc');
-
-    const enriched = users.map(u => ({
-      ...u,
-      status: u.invite_token ? 'invited' : (u.is_active ? 'active' : 'inactive'),
-    }));
-
-    res.json({ users: enriched });
-  } catch (err) {
-    console.error('Error fetching users:', err);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    const users = await db('users').select('id', 'email', 'name', 'role', 'is_active', 'created_at', 'updated_at');
+    res.json({ users });
+  } catch (error) {
+    console.error('Get users error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/admin/users/invite - Invite a new admin user
-router.post('/users/invite', async (req, res) => {
+// POST /users/invite
+router.post('/users/invite', authenticate, requireAdmin, [
+  body('email').isEmail(),
+  body('name').notEmpty(),
+  body('role').isIn(['admin', 'viewer']),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
-    const { email, name, role = 'admin' } = req.body;
+    const { email, name, role } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+    const existingUser = await db('users').where('email', email).first();
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' });
     }
 
-    const existing = await db('users').where({ email }).first();
-    if (existing) {
-      return res.status(409).json({ error: 'User with this email already exists' });
-    }
+    const inviteToken = require('crypto').randomBytes(32).toString('hex');
 
-    const inviteToken = crypto.randomBytes(32).toString('hex');
-    const [user] = await db('users').insert({
+    const [userId] = await db('users').insert({
       email,
-      name: name || email.split('@')[0],
+      name,
       role,
-      invite_token: inviteToken,
+      password_hash: null,
       is_active: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }).returning('*');
-
-    // Send invite email
-    try {
-      await sendInviteEmail(email, inviteToken, name || email.split('@')[0]);
-    } catch (emailErr) {
-      console.warn('Failed to send invite email:', emailErr.message);
-    }
-
-    // Log the action
-    await db('audit_logs').insert({
-      user_id: req.user.id,
-      action: 'user_invited',
-      resource_type: 'user',
-      resource_id: user.id || user,
-      details: JSON.stringify({ email, role }),
-      ip_address: req.ip,
-      created_at: new Date().toISOString()
+      invite_token: inviteToken,
+      created_at: new Date(),
+      updated_at: new Date(),
     });
 
-    res.status(201).json({ message: 'Invitation sent', user: { email, name, role, invite_token: inviteToken } });
-  } catch (err) {
-    console.error('Error inviting user:', err);
-    res.status(500).json({ error: 'Failed to invite user' });
+    await createAuditLog(
+      req.user.id,
+      'user:invite',
+      'user',
+      userId,
+      { email, role },
+      req.ip
+    );
+
+    res.json({
+      user: { id: userId, email, name, role, is_active: false },
+      inviteToken,
+    });
+  } catch (error) {
+    console.error('Invite user error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PATCH /api/admin/users/:id - Update user
-router.patch('/users/:id', async (req, res) => {
+// PATCH /users/:id
+router.patch('/users/:id', authenticate, requireAdmin, [
+  body('name').optional().notEmpty(),
+  body('role').optional().isIn(['admin', 'viewer']),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const { id } = req.params;
-    const { name, role, is_active } = req.body;
+    const { name, role } = req.body;
 
-    const user = await db('users').where({ id }).first();
+    const user = await db('users').where('id', id).first();
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const updates = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updates.name = name;
-    if (role !== undefined) updates.role = role;
-    if (is_active !== undefined) updates.is_active = is_active;
+    const updates = { updated_at: new Date() };
+    if (name) updates.name = name;
+    if (role) updates.role = role;
 
-    await db('users').where({ id }).update(updates);
+    await db('users').where('id', id).update(updates);
 
-    await db('audit_logs').insert({
-      user_id: req.user.id,
-      action: 'user_updated',
-      resource_type: 'user',
-      resource_id: id,
-      details: JSON.stringify(updates),
-      ip_address: req.ip,
-      created_at: new Date().toISOString()
-    });
+    await createAuditLog(
+      req.user.id,
+      'user:update',
+      'user',
+      id,
+      updates,
+      req.ip
+    );
 
-    const updated = await db('users').where({ id }).first();
-    res.json({ user: updated });
-  } catch (err) {
-    console.error('Error updating user:', err);
-    res.status(500).json({ error: 'Failed to update user' });
+    res.json({ message: 'User updated' });
+  } catch (error) {
+    console.error('Update user error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/admin/users/:id - Deactivate user
-router.delete('/users/:id', async (req, res) => {
+// DELETE /users/:id
+router.delete('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ error: 'Cannot deactivate your own account' });
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete yourself' });
     }
 
-    const user = await db('users').where({ id }).first();
+    const user = await db('users').where('id', id).first();
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await db('users').where({ id }).update({ is_active: false, updated_at: new Date().toISOString() });
+    await db('users').where('id', id).del();
 
-    await db('audit_logs').insert({
-      user_id: req.user.id,
-      action: 'user_deactivated',
-      resource_type: 'user',
-      resource_id: id,
-      details: JSON.stringify({ email: user.email }),
-      ip_address: req.ip,
-      created_at: new Date().toISOString()
-    });
+    await createAuditLog(
+      req.user.id,
+      'user:delete',
+      'user',
+      id,
+      { email: user.email },
+      req.ip
+    );
 
-    res.json({ message: 'User deactivated' });
-  } catch (err) {
-    console.error('Error deactivating user:', err);
-    res.status(500).json({ error: 'Failed to deactivate user' });
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    console.error('Delete user error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/admin/audit-logs - Paginated audit log
-router.get('/audit-logs', async (req, res) => {
+// GET /audit-logs
+router.get('/audit-logs', authenticate, requireAdmin, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-
-    const [{ count }] = await db('audit_logs').count('* as count');
     const logs = await db('audit_logs')
       .leftJoin('users', 'audit_logs.user_id', 'users.id')
-      .select('audit_logs.*', 'users.email as user_email', 'users.name as user_name')
+      .select(
+        'audit_logs.id',
+        'audit_logs.user_id',
+        'users.email as user_email',
+        'audit_logs.action',
+        'audit_logs.resource_type',
+        'audit_logs.resource_id',
+        'audit_logs.details',
+        'audit_logs.ip_address',
+        'audit_logs.created_at'
+      )
       .orderBy('audit_logs.created_at', 'desc')
-      .limit(limit)
-      .offset(offset);
+      .limit(1000);
 
-    res.json({
-      logs,
-      pagination: {
-        page,
-        limit,
-        total: parseInt(count),
-        pages: Math.ceil(parseInt(count) / limit)
-      }
-    });
-  } catch (err) {
-    console.error('Error fetching audit logs:', err);
-    res.status(500).json({ error: 'Failed to fetch audit logs' });
+    res.json({ logs });
+  } catch (error) {
+    console.error('Get audit logs error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/admin/analytics - Dashboard stats
-router.get('/analytics', async (req, res) => {
+// GET /analytics
+router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
   try {
-    const [protoCount] = await db('prototypes').count('* as count');
-    const [linkCount] = await db('magic_links').count('* as count');
-    const [viewCount] = await db('link_views').count('* as count');
-    const [userCount] = await db('users').where({ is_active: true }).count('* as count');
-
-    const recentViews = await db('link_views')
-      .select('link_views.*', 'prototypes.title as prototype_title')
-      .leftJoin('prototypes', 'link_views.prototype_id', 'prototypes.id')
-      .orderBy('link_views.viewed_at', 'desc')
-      .limit(10);
+    const totalUsers = await db('users').count('* as count').first();
+    const totalPrototypes = await db('prototypes').count('* as count').first();
+    const totalLinks = await db('magic_links').count('* as count').first();
+    const totalViews = await db('link_views').count('* as count').first();
 
     res.json({
-      stats: {
-        prototypes: parseInt(protoCount.count),
-        magic_links: parseInt(linkCount.count),
-        total_views: parseInt(viewCount.count),
-        active_users: parseInt(userCount.count)
+      analytics: {
+        totalUsers: totalUsers.count,
+        totalPrototypes: totalPrototypes.count,
+        totalLinks: totalLinks.count,
+        totalViews: totalViews.count,
       },
-      recent_views: recentViews
     });
-  } catch (err) {
-    console.error('Error fetching analytics:', err);
-    res.status(500).json({ error: 'Failed to fetch analytics' });
+  } catch (error) {
+    console.error('Get analytics error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

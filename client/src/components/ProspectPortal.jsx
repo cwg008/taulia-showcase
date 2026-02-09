@@ -1,32 +1,114 @@
-import React, { useState, useEffect, useRef } from 'react'; const CATEGORIES = [ { value: 'general', label: 'General', color: '#6B72sÍ' }, { value: 'ui', label: 'UI / Design', color: '#3B82F6' }, { value: 'navigation', label: 'Navigation', color: '#8B5CF6' }, { value: 'feature', label: 'Feature Request', color: '#10B981' }, { value: 'performance', label: 'Performance', color: '#F59E0B' }, ]; function StarRating({ value, onChange, size = 24, readonly = false }) { const [hover, setHover] = useState(0); return ( <div style={{ display: 'flex', gap: '4px'}}> {[[,2, 3, 4, 5].map(star => ( <button key={star} type="button" disabled={readonly} onClick={() => onChange && onChange(star === value ? 0 : star)} onMouseEnter={() => !readonly && setHover(star)} onMouseLeave={() => !readonly && setHover(0)} style={{ background: 'none', border: 'none', cursor: readonly ? 'default' : 'pointer', padding: 0, fontSize: `${size}px`, lineHeight: 1, color: star <= (hover || value) ? '#F59E0B' : '#D1D5DB', transition: 'color 0.15s, transform 0.1s',
- transform: !readonly && star <= hover ? 'scale(1.15)' : 'scale(1)',
-        }}
-      >
-        {â„…
-      </button>
-      ))}
-    </div>
-  );
-}
-function PrototypeCard({ prototype, onOpen }) {
-  const [isHovered, setIsHovered] = useState(false);
+import React, { useState } from 'react';
+import apiClient from '../api/client.js';
+
+const ProspectPortal = ({ token }) => {
+  const [feedback, setFeedback] = useState('');
+  const [category, setCategory] = useState('general');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+
+    try {
+      await apiClient.post(`/api/prospect/${token}/feedback`, {
+        feedback,
+        category,
+      });
+      setSubmitted(true);
+      setTimeout(() => {
+        setFeedback('');
+        setCategory('general');
+        setSubmitted(false);
+      }, 3000);
+    } catch (err) {
+      setError('Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div
-      onClick={() => onOpen(prototype)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
-        background: '#FFFFFF',
-        borderRadius: '12px',
-        border: '1px solid #E0E6ED',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        boxShadow: isHovered ? '0 8px 24px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.06)',
-        transform: isHovered ? 'translateY(-2px)' : 'none',
+        minHeight: '100vh',
+        background: 'var(--taulia-bg)',
+        padding: '40px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      {}
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+          padding: '40px',
+          maxWidth: '500px',
+          width: '100%',
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <h1
+            style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              color: 'var(--taulia-text)',
+              marginBottom: '8px',
+            }}
+          >
+            Share Your Feedback
+          </h1>
+          <p style={{ color: 'var(--taulia-light-text)', fontSize: '14px' }}>
+            Help us improve the prototype
+          </p>
+        </div>
+
+        {error && <div className="error-message">{error}</div>}
+        {submitted && <div className="success-message">Thank you for your feedback!</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="category">Feedback Category</label>
+            <select
+              id="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="general">General</option>
+              <option value="ui">UI/Design</option>
+              <option value="feature">Feature Request</option>
+              <option value="bug">Bug Report</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="feedback">Your Feedback</label>
+            <textarea
+              id="feedback"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Tell us what you think..."
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn-primary"
+            style={{ width: '100%' }}
+            disabled={submitting}
+          >
+            {submitting ? 'Submitting...' : 'Submit Feedback'}
+          </button>
+        </form>
+      </div>
     </div>
   );
-}
+};
+
+export default ProspectPortal;

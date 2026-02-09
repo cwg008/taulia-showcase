@@ -1,12 +1,12 @@
 const express = require('express');
-const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { db } = require('../config/database');
-const { UPLOAD_DIR } = require('../services/uploadService');
+const db = require('../config/database');
 
-// GET /api/viewer/:token - Validate magic link and return prototype info
-router.get('/:token', async (req, res, next) => {
+const router = express.Router();
+
+// GET /:token - Validate magic link and return prototype metadata
+router.get('/:token', async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -15,42 +15,37 @@ router.get('/:token', async (req, res, next) => {
       .first();
 
     if (!link) {
-      return res.status(404).json({ error: 'Link not found or invalid' });
+      return res.status(404).json({ error: 'Invalid link' });
     }
 
     if (link.is_revoked) {
-      return res.status(403).json({ error: 'This link has been revoked' });
+      return res.status(403).json({ error: 'Link has been revoked' });
     }
 
     if (link.expires_at && new Date(link.expires_at) < new Date()) {
-      return res.status(403).json({ error: 'This link has expired' });
+      return res.status(403).json({ error: 'Link has expired' });
     }
 
-    // Get prototype
     const prototype = await db('prototypes')
       .where('id', link.prototype_id)
       .first();
 
-    if (!prototype) {
-      return res.status(404).json({ error: 'Prototype not found' });
+    if (!prototype || prototype.status !== 'published') {
+      return res.status(404).json({ error: 'Prototype not found or not published' });
     }
 
-    if (prototype.status !== 'published') {
-      return res.status(403).json({ error: 'This prototype is not currently available' });
-    }
-
-    // Record the view
+    // Record view
     await db('link_views').insert({
+      id: require('crypto').randomBytes(8).toString('hex'),
       magic_link_id: link.id,
       prototype_id: prototype.id,
-      ip_address: req.ip || req.connection?.remoteAddress,
-      user_agent: req.headers['user-agent']?.substring(0, 500),
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+      viewed_at: new Date(),
     });
 
     // Increment view count
-    await db('magic_links')
-      .where('id', link.id)
-      .increment('view_count', 1);
+    await db('magic_links').where('id', link.id).increment('view_count', 1);
 
     res.json({
       prototype: {
@@ -60,59 +55,61 @@ router.get('/:token', async (req, res, next) => {
         type: prototype.type,
         version: prototype.version,
       },
-      serve_url: `/api/viewer/${token}/serve/`,
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Get viewer error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/viewer/:token/serve/* - Serve prototype files
-router.get('/:token/serve/*', async (req, res, next) => {
+// GET /:token/serve/* - Serve static prototype files
+router.get('/:token/serve/*', async (req, res) => {
   try {
     const { token } = req.params;
+    const filePath = req.params[0];
 
-    // Validate the link (quick check, no view recording)
-    const link = await db('magic_links').where('token', token).first();
+    // Validate token
+    const link = await db('magic_links')
+      .where('token', token)
+      .first();
 
-    if (!link || link.is_revoked) {
-      return res.status(403).json({ error: 'Invalid or revoked link' });
+    if (!link) {
+      return res.status(404).json({ error: 'Invalid link' });
+    }
+
+    if (link.is_revoked) {
+      return res.status(403).json({ error: 'Link has been revoked' });
     }
 
     if (link.expires_at && new Date(link.expires_at) < new Date()) {
-      return res.status(403).json({ error: 'Link expired' });
+      return res.status(403).json({ error: 'Link has expired' });
     }
 
-    const prototype = await db('prototypes').where('id', link.prototype_id).first();
+    const prototype = await db('prototypes')
+      .where('id', link.prototype_id)
+      .first();
+
     if (!prototype) {
       return res.status(404).json({ error: 'Prototype not found' });
     }
 
-    // Get the requested file path
-    const requestedPath = req.params[0] || '';
-    const protoDir = path.join(UPLOAD_DIR, 'prototypes', String(prototype.id));
+    // Construct safe file path
+    const uploadsDir = path.join(__dirname, '..', 'uploads', 'prototypes', prototype.id);
+    const fullPath = path.join(uploadsDir, filePath);
 
-    // If no specific file requested, serve the main HTML
-    let filePath;
-    if (!requestedPath || requestedPath === '' || requestedPath === '/') {
-      filePath = path.join(UPLOAD_DIR, prototype.file_path);
-    } else {
-      filePath = path.join(protoDir, requestedPath);
-    }
-
-    // Security: prevent path traversal
-    const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(path.resolve(UPLOAD_DIR))) {
+    // Security: prevent directory traversal
+    if (!fullPath.startsWith(uploadsDir)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (!fs.existsSync(resolved)) {
+    if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    res.sendFile(resolved);
-  } catch (err) {
-    next(err);
+    res.sendFile(fullPath);
+  } catch (error) {
+    console.error('Serve file error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

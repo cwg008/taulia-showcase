@@ -1,205 +1,95 @@
-import [ useState, useEffect ] from 'react';
-import [ apiClient ] from '../api/client';
+import React, { useState, useEffect } from 'react';
+import apiClient from '../api/client.js';
 
-export default function AuditLog() {
+const AuditLog = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [actionFilter, setActionFilter] = useState('');
-  const [methodFilter, setMethodFilter] = useState('');
-  const itemsPerPage = 20;
+  const pageSize = 20;
 
   useEffect(() => {
     fetchLogs();
-  }, [currentPage, actionFilter, methodFilter]);
+  }, [page]);
 
   const fetchLogs = async () => {
-    setLoading(true);
     try {
-      const params = {
-        page: currentPage,
-        limit: itemsPerPage,
-      };
-      if (actionFilter) params.action = actionFilter;
-      if (methodFilter) params.method = methodFilter;
-
-      const response = await apiClient.get('/admin/audit-logs', { params });
-      setLogs(response.logs || []);
-      setTotalPages(response.pagination?.totalPages || 1);
-    } catch (error) {
-      console.error('Failed to fetch audit logs:', error);
-    }
-    setLoading(false);
-  };
-
-  const getMethodColor = (method) => {
-    switch (method) {
-      case 'GET':
-        return '#10b981';
-      case 'POST':
-        return '#3b82f6';
-      case 'PATCH':
-        return '#f59e0b';
-      case 'DELETE':
-        return '#ef4444';
-      default:
-        return '#6b7280';
+      const data = await apiClient.get(`/api/admin/audit-logs?page=${page}&limit=${pageSize}`);
+      setLogs(data.logs || []);
+      setTotalPages(data.totalPages || 1);
+    } catch (err) {
+      setError('Failed to load audit logs');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusColor = (statusCode) => {
-    if (statusCode >= 200 && statusCode < 300) {
-      return '#10b981';
-    }
-    if (statusCode >= 400) {
-      return '#ef4444';
-    }
-    return '#6b7280';
-  };
-
-  const formatTimestamp = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  if (loading && logs.length === 0) {
-    return <div className="container"><p>Loading...</p></div>;
+  if (loading) {
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        Loading audit logs...
+      </div>
+    );
   }
 
   return (
-    <div className="container">
-      <h1>Audit Log</h1>
+    <div>
+      {error && <div className="error-message">{error}</div>}
 
-      {/* Filter Bar */}
-      <div className="filter-bar">
-        <div className="form-group">
-          <label htmlFor="action-filter">Action</label>
-          <select
-            id="action-filter"
-            value={actionFilter}
-            onChange={(e) => {
-              setActionFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">All</option>
-            <option value="auth:login">auth:login</option>
-            <option value="auth:logout">auth:logout</option>
-            <option value="auth:register">auth:register</option>
-            <option value="admin:access">admin:access</option>
-            <option value="prototype:manage">prototype:manage</option>
-            <option value="link:manage">link:manage</option>
-            <option value="viewer:access">viewer:access</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="method-filter">Method</label>
-          <select
-            id="method-filter"
-            value={methodFilter}
-            onChange={(e) => {
-              setMethodFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">All</option>
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PATCH">PATCH</option>
-            <option value="DELETE">DELETE</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Logs Table */}
-      <div className="table-container">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>User</th>
-              <th>Action</th>
-              <th>Method</th>
-              <th>Resource</th>
-              <th>Status Code</th>
-              <th>IP Address</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 ? (
+      {logs.length > 0 ? (
+        <div className="card">
+          <table>
+            <thead>
               <tr>
-                <td colSpan="7" className="text-center">
-                  No logs found.
-                </td>
+                <th>Timestamp</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Resource</th>
+                <th>IP Address</th>
               </tr>
-            ) : (
-              logs.map((log) => (
-                <tr key={log.id}>
-                  <td>{formatTimestamp(log.created_at)}</td>
-                  <td>{log.user_name || log.user_email || 'Anonymous'}</td>
-                  <td>{log.action}</td>
+            </thead>
+            <tbody>
+              {logs.map((log, idx) => (
+                <tr key={idx}>
+                  <td>{new Date(log.timestamp).toLocaleString()}</td>
+                  <td>{log.userEmail}</td>
                   <td>
-                    <span
-                      className="badge"
-                      style={{
-                        backgroundColor: getMethodColor(log.method),
-                        color: 'white',
-                      }}
-                    >
-                      {log.method}
-                    </span>
+                    <span className="badge badge-primary">{log.action}</span>
                   </td>
-                  <td className="code">
-                    <code>{log.resource_url || '-'}</code>
-                  </td>
-                  <td>
-                    <span
-                      className="badge"
-                      style={{
-                        backgroundColor: getStatusColor(log.status_code),
-                        color: 'white',
-                      }}
-                    >
-                      {log.status_code}
-                    </span>
-                  </td>
-                  <td className="monospace">{log.ip_address}</td>
+                  <td>{log.resourceType}: {log.resourceId}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.ipAddress}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
 
-      {/* Pagination */}
-      <div className="pagination">
-        <button
-          className="btn btn-secondary"
-          disabled={currentPage === 1}
-          onClick={() => setCurrentPage(currentPage - 1)}
-        >
-          Previous
-        </button>
-        <span className="pagination-info">
-          Page {currentPage} of {totalPages}
-        </span>
-        <button
-          className="btn btn-secondary"
-          disabled={currentPage >= totalPages}
-          onClick={() => setCurrentPage(currentPage + 1)}
-        >
-          Next
-        </button>
-      </div>
+          <div className="pagination">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+            >
+              ← Previous
+            </button>
+            <span style={{ padding: '0 10px' }}>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-body">No audit logs available.</div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default AuditLog;

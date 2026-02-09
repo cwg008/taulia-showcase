@@ -9,10 +9,16 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/api')
       },
       '/uploads': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true
       }
     }
   },
@@ -26,6 +32,11 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('react-dom') || id.includes('react/')) return 'vendor';
+            if (id.includes('leaflet')) return 'leaflet';
+            if (id.includes('dompurify')) return 'sanitize';
+            if (id.includes('socket.io')) return 'socketio';
+            if (id.includes('html2canvas')) return 'html2canvas';
+            if (id.includes('jspdf')) return 'jspdf';
           }
         },
       },

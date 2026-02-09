@@ -1,84 +1,73 @@
-import { useState } from 'react';
-import { useAuth } from './context/AuthContext';
-import LoginPage from './components/LoginPage';
-import InviteAcceptPage from './components/InviteAcceptPage';
-import PublicViewer from './components/PublicViewer';
-import ProspectPortal from './components/ProspectPortal';
-import Dashboard from './components/Dashboard';
-import PrototypeList from './components/PrototypeList';
-import PrototypeDetail from './components/PrototypeDetail';
-import MagicLinkManager from './components/MagicLinkManager';
-import UserManager from './components/UserManager';
-import AuditLog from './components/AuditLog';
-import DocumentationView from './components/DocumentationView';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from './context/AuthContext.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import PrototypeList from './components/PrototypeList.jsx';
+import PrototypeDetail from './components/PrototypeDetail.jsx';
+import MagicLinkManager from './components/MagicLinkManager.jsx';
+import UserManager from './components/UserManager.jsx';
+import AuditLog from './components/AuditLog.jsx';
+import PublicViewer from './components/PublicViewer.jsx';
+import InviteAcceptPage from './components/InviteAcceptPage.jsx';
+import ProspectPortal from './components/ProspectPortal.jsx';
+import DocumentationView from './components/DocumentationView.jsx';
 
-function App() {
+export default function App() {
   const { user, loading, isAuthenticated, logout } = useAuth();
-  const [activeView, setActiveView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState('dashboard');
   const [selectedPrototypeId, setSelectedPrototypeId] = useState(null);
 
-  // Check for public viewer route
+  // Parse URL to determine view
   const path = window.location.pathname;
-  if (path.startsWith('/view/')) {
-    const token = path.split('/view/')[1];
-    return <PublicViewer token={token} />;
-  }
-
-  // Check for invite token
-  const params = new URLSearchParams(window.location.search);
-  const inviteToken = params.get('invite');
-  if (inviteToken) {
-    return <InviteAcceptPage token={inviteToken} onAccepted={() => window.location.href = '/'} />;
-  }
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f7fa' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <div style={{ textAlign: 'center' }}>
-          <div className="spinner" />
-          <p style={{ color: '#666', marginTop: 16 }}>Loading...</p>
+          <div className="spinner"></div>
+          <p>Loading...</p>
         </div>
       </div>
     );
   }
 
+  // Public routes (no auth required)
+  if (path.startsWith('/viewer/')) {
+    const token = path.replace('/viewer/', '');
+    return <PublicViewer token={token} />;
+  }
+
+  if (path.startsWith('/prospect/')) {
+    const token = path.replace('/prospect/', '');
+    return <ProspectPortal token={token} />;
+  }
+
+  if (path.startsWith('/invite/')) {
+    const token = path.replace('/invite/', '');
+    return <InviteAcceptPage token={token} />;
+  }
+
+  // Protected routes
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
-  // Route prospects/customers to their dedicated portal
-  if (user.role === 'prospect') {
-    return <ProspectPortal />;
-  }
+  // Admin dashboard
+  const renderContent = () => {
+    if (selectedPrototypeId) {
+      return (
+        <PrototypeDetail
+          prototypeId={selectedPrototypeId}
+          onBack={() => setSelectedPrototypeId(null)}
+        />
+      );
+    }
 
-  // Admin experience below
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'prototypes', label: 'Prototypes', icon: '🧩' },
-    { id: 'links', label: 'Magic Links', icon: '🔗' },
-    { id: 'users', label: 'Users', icon: '👥' },
-    { id: 'audit', label: 'Audit Log', icon: '📋' },
-    { id: 'docs', label: 'Documentation', icon: '📖' },
-  ];
-
-  const handleViewPrototype = (id) => {
-    setSelectedPrototypeId(id);
-    setActiveView('prototype-detail');
-  };
-
-  const handleBackToList = () => {
-    setSelectedPrototypeId(null);
-    setActiveView('prototypes');
-  };
-
-  const renderView = () => {
-    switch (activeView) {
+    switch (currentView) {
       case 'dashboard':
-        return <Dashboard onNavigate={setActiveView} onViewPrototype={handleViewPrototype} />;
+        return <Dashboard />;
       case 'prototypes':
-        return <PrototypeList onViewPrototype={handleViewPrototype} />;
-      case 'prototype-detail':
-        return <PrototypeDetail prototypeId={selectedPrototypeId} onBack={handleBackToList} />;
+        return <PrototypeList onSelectPrototype={setSelectedPrototypeId} />;
       case 'links':
         return <MagicLinkManager />;
       case 'users':
@@ -88,56 +77,100 @@ function App() {
       case 'docs':
         return <DocumentationView />;
       default:
-        return <Dashboard onNavigate={setActiveView} onViewPrototype={handleViewPrototype} />;
+        return <Dashboard />;
     }
   };
 
   return (
-    <div className="app-layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
+    <div className="app-container">
+      <div className="sidebar">
         <div className="sidebar-header">
-          <div className="logo">
-            <span className="logo-icon">T</span>
-            <div>
-              <div className="logo-title">Taulia</div>
-              <div className="logo-subtitle">Prototype Showcase</div>
-            </div>
-          </div>
+          <span className="sidebar-logo">T</span>
+          Taulia
         </div>
         <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              className={`nav-item ${activeView === item.id || (activeView === 'prototype-detail' && item.id === 'prototypes') ? 'active' : ''}`}
-              onClick={() => {
-                if (item.id === 'prototypes') handleBackToList();
-                else setActiveView(item.id);
-              }}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-            </button>
-          ))}
+          <div
+            className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('dashboard');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            📊 Dashboard
+          </div>
+          <div
+            className={`nav-item ${currentView === 'prototypes' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('prototypes');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            🖼️ Prototypes
+          </div>
+          <div
+            className={`nav-item ${currentView === 'links' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('links');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            🔗 Magic Links
+          </div>
+          <div
+            className={`nav-item ${currentView === 'users' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('users');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            👥 Users
+          </div>
+          <div
+            className={`nav-item ${currentView === 'audit' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('audit');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            📋 Audit Log
+          </div>
+          <div
+            className={`nav-item ${currentView === 'docs' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('docs');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            📚 Documentation
+          </div>
         </nav>
         <div className="sidebar-footer">
-          <div className="user-info">
-            <div className="user-avatar">{user.name?.[0]?.toUpperCase() || 'A'}</div>
-            <div>
-              <div className="user-name">{user.name}</div>
-              <div className="user-email">{user.email}</div>
-            </div>
-          </div>
-          <button className="logout-btn" onClick={logout}>Sign Out</button>
+          Version 1.0.0
         </div>
-      </aside>
+      </div>
 
-      {/* Main content */}
-      <main className="main-content">
-        {renderView()}
-      </main>
+      <div className="main-content">
+        <div className="app-header">
+          <div className="header-title">
+            {currentView === 'dashboard' && 'Dashboard'}
+            {currentView === 'prototypes' && 'Prototypes'}
+            {currentView === 'links' && 'Magic Links'}
+            {currentView === 'users' && 'User Management'}
+            {currentView === 'audit' && 'Audit Log'}
+            {currentView === 'docs' && 'Documentation'}
+          </div>
+          <div className="header-user">
+            <span className="user-email">{user?.email}</span>
+            <button className="btn-secondary btn-small" onClick={logout}>
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="content-area">
+          {renderContent()}
+        </div>
+      </div>
     </div>
   );
 }
-
-export default App;

@@ -1,168 +1,173 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
+const db = require('../config/database');
+const { authenticate, requireAdmin } = require('../middleware/auth');
+const { createAuditLog } = require('../middleware/auditLog');
+
 const router = express.Router();
-const crypto = require('crypto');
-const { db } = require('../config/database');
-const { authenticate, authorize } = require('../middleware/auth');
-const { body, param, validationResult } = require('express-validator');
 
-router.use(authenticate, authorize('admin'));
-
-// GET /api/links - List all magic links
-router.get('/', async (req, res, next) => {
+// GET / - List all magic links with prototype info
+router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { page = 1, limit = 25 } = req.query;
-    const offset = (page - 1) * limit;
-
     const links = await db('magic_links')
       .leftJoin('prototypes', 'magic_links.prototype_id', 'prototypes.id')
-      .leftJoin('users', 'magic_links.created_by', 'users.id')
       .select(
-        'magic_links.*',
+        'magic_links.id',
+        'magic_links.token',
+        'magic_links.prototype_id',
         'prototypes.title as prototype_title',
-        'prototypes.status as prototype_status',
-        'users.name as created_by_name'
+        'magic_links.label',
+        'magic_links.created_by',
+        'magic_links.expires_at',
+        'magic_links.is_revoked',
+        'magic_links.view_count',
+        'magic_links.created_at'
       )
-      .orderBy('magic_links.created_at', 'desc')
-      .limit(limit)
-      .offset(offset);
+      .orderBy('magic_links.created_at', 'desc');
 
-    const [{ count }] = await db('magic_links').count('* as count');
-
-    res.json({
-      links,
-      pagination: { page: Number(page), limit: Number(limit), total: Number(count) },
-    });
-  } catch (err) {
-    next(err);
+    res.json({ links });
+  } catch (error) {
+    console.error('Get magic links error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/links - Create a magic link
-router.post('/',
-  body('prototype_id').isInt().withMessage('Prototype ID is required'),
-  body('label').optional().trim(),
-  body('expires_at').optional().isISO8601(),
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: 'Validation failed', details: errors.array() });
-      }
+// POST / - Create new magic link
+router.post('/', authenticate, requireAdmin, [
+  body('prototypeId').notEmpty(),
+  body('label').notEmpty(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
 
-      const { prototype_id, label, expires_at, recipient_email } = req.body;
+  try {
+    const { prototypeId, label, expiresAt } = req.body;
 
-      // Verify prototype exists
-      const prototype = await db('prototypes').where('id', prototype_id).first();
-      if (!prototype) {
-        return res.status(404).json({ error: 'Prototype not found' });
-      }
+    const prototype = await db('prototypes').where('id', prototypeId).first();
+    if (!prototype) {
+      return res.status(404).json({ error: 'Prototype not found' });
+    }
 
-      const token = crypto.randomBytes(32).toString('hex');
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const linkId = require('crypto').randomBytes(8).toString('hex');
 
-      const [id] = await db('magic_links').insert({
+    const [id] = await db('magic_links').insert({
+      id: linkId,
+      token,
+      prototype_id: prototypeId,
+      label,
+      created_by: req.user.id,
+      expires_at: expiresAt || null,
+      is_revoked: false,
+      view_count: 0,
+      created_at: new Date(),
+    });
+
+    await createAuditLog(
+      req.user.id,
+      'link:create',
+      'magic_link',
+      linkId,
+      { prototypeId, label },
+      req.ip
+    );
+
+    res.status(201).json({
+      link: {
+        id: linkId,
         token,
-        prototype_id,
-        label: label || `Link for ${prototype.title}`,
-        created_by: req.user.id,
-        expires_at: expires_at || null,
-        recipient_email: recipient_email || null,
-        is_revoked: false,
-        view_count: 0,
-      });
-
-      const link = await db('magic_links').where('id', id).first();
-
-      res.status(201).json({
-        link,
-        share_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/view/${token}`,
-      });
-    } catch (err) {
-      next(err);
-    }
+        prototypeId,
+        label,
+        isRevoked: false,
+        viewCount: 0,
+      },
+    });
+  } catch (error) {
+    console.error('Create magic link error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-);
+});
 
-// GET /api/links/:id - Get link details with analytics
-router.get('/:id',
-  param('id').isInt(),
-  async (req, res, next) => {
-    try {
-      const link = await db('magic_links')
-        .leftJoin('prototypes', 'magic_links.prototype_id', 'prototypes.id')
-        .select('magic_links.*', 'prototypes.title as prototype_title')
-        .where('magic_links.id', req.params.id)
-        .first();
+// GET /:id - Get magic link by ID
+router.get('/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const link = await db('magic_links')
+      .leftJoin('prototypes', 'magic_links.prototype_id', 'prototypes.id')
+      .where('magic_links.id', id)
+      .select('magic_links.*', 'prototypes.title as prototype_title')
+      .first();
 
-      if (!link) {
-        return res.status(404).json({ error: 'Magic link not found' });
-      }
-
-      // Get view history
-      const views = await db('link_views')
-        .where('magic_link_id', link.id)
-        .orderBy('viewed_at', 'desc')
-        .limit(100);
-
-      // Views per day (last 30 days)
-      const dailyViews = await db('link_views')
-        .where('magic_link_id', link.id)
-        .select(db.raw("DATE(viewed_at) as date"))
-        .count('* as views')
-        .groupByRaw('DATE(viewed_at)')
-        .orderBy('date', 'desc')
-        .limit(30);
-
-      res.json({ link, views, daily_views: dailyViews });
-    } catch (err) {
-      next(err);
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
     }
+
+    res.json({ link });
+  } catch (error) {
+    console.error('Get magic link error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-);
+});
 
-// PATCH /api/links/:id - Update link (revoke, expiry)
-router.patch('/:id',
-  param('id').isInt(),
-  body('is_revoked').optional().isBoolean(),
-  body('expires_at').optional().isISO8601(),
-  body('label').optional().trim(),
-  async (req, res, next) => {
-    try {
-      const link = await db('magic_links').where('id', req.params.id).first();
-      if (!link) {
-        return res.status(404).json({ error: 'Magic link not found' });
-      }
+// PATCH /:id - Revoke magic link
+router.patch('/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-      const updates = {};
-      if (req.body.is_revoked !== undefined) updates.is_revoked = req.body.is_revoked;
-      if (req.body.expires_at !== undefined) updates.expires_at = req.body.expires_at;
-      if (req.body.label !== undefined) updates.label = req.body.label;
-
-      await db('magic_links').where('id', req.params.id).update(updates);
-      const updated = await db('magic_links').where('id', req.params.id).first();
-
-      res.json({ link: updated });
-    } catch (err) {
-      next(err);
+    const link = await db('magic_links').where('id', id).first();
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
     }
+
+    await db('magic_links').where('id', id).update({
+      is_revoked: true,
+      updated_at: new Date(),
+    });
+
+    await createAuditLog(
+      req.user.id,
+      'link:revoke',
+      'magic_link',
+      id,
+      { token: link.token },
+      req.ip
+    );
+
+    res.json({ message: 'Link revoked' });
+  } catch (error) {
+    console.error('Revoke magic link error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-);
+});
 
-// DELETE /api/links/:id - Delete link
-router.delete('/:id',
-  param('id').isInt(),
-  async (req, res, next) => {
-    try {
-      const link = await db('magic_links').where('id', req.params.id).first();
-      if (!link) {
-        return res.status(404).json({ error: 'Magic link not found' });
-      }
+// DELETE /:id - Delete magic link
+router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-      await db('magic_links').where('id', req.params.id).del();
-      res.json({ message: 'Magic link deleted' });
-    } catch (err) {
-      next(err);
+    const link = await db('magic_links').where('id', id).first();
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
     }
+
+    await db('magic_links').where('id', id).del();
+
+    await createAuditLog(
+      req.user.id,
+      'link:delete',
+      'magic_link',
+      id,
+      { token: link.token },
+      req.ip
+    );
+
+    res.json({ message: 'Link deleted' });
+  } catch (error) {
+    console.error('Delete magic link error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-);
+});
 
 module.exports = router;
