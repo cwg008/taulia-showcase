@@ -4,5 +4,4 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "node server/index.js"
-healthcheckPath = "/"
 restartPolicyType = "ON_FAILURE"
