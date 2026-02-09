@@ -17,7 +17,7 @@ const Dashboard = ({ onNavigate, onViewPrototype }) => {
     const fetchStats = async () => {
       try {
         setLoading(true);
-        // apiClient returns JSON directly â€” no .data wrapper
+        // apiClient returns JSON directly Ã¢â‚¬â€ no .data wrapper
         const data = await apiClient.get('/admin/analytics');
         console.log('[Dashboard] Analytics response:', data);
         setStats({
@@ -219,4 +219,7 @@ const Dashboard = ({ onNavigate, onViewPrototype }) => {
         </div>
       </div>
     </div>
-  +H(ñÊ
+  );
+};
+
+export default Dashboard;
