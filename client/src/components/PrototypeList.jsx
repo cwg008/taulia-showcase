@@ -1,0 +1,1 @@
+import React, { useState, useEffect } from 'react'; const PrototypeList = ({ onViewPrototype }) => { return ( <div className="container"><h1>Prototypes</h1></div> |); }; export default PrototypeList;

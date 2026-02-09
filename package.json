@@ -1,0 +1,29 @@
+{
+  "name": "taulia-showcase",
+  "version": "1.0.0",
+  "description": "Taulia Prototype Showcase - Share interactive prototypes with customers and prospects",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "prebuild": "rm -rf server/public",
+    "build": "npm run build --workspace=client",
+    "start": "node server/index.js",
+    "postinstall": "npm run migrate --workspace=server 2>/dev/null || true",
+    "db:migrate": "npm run migrate --workspace=server",
+    "db:seed": "npm run seed --workspace=server",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "author": "Taulia",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "sqlite3": "^5.1.7"
+  }
+}

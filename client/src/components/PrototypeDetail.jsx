@@ -1,0 +1,1 @@
+import React, { useState, useEffect } from 'react'; const PrototypeDetail = ({ prototypeId, onBack }) => { return ( <div className="prototype-detail"> </div> ); }; export default PrototypeDetail;

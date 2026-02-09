@@ -1,0 +1,15 @@
+node_modules
+server/node_modules
+client/node_modules
+server/public
+server/dev.sqlite3
+server/*.sqlite3
+.env
+.env.local
+.env.production
+.git
+.gitignore
+*.md
+docker-compose.yml
+.DS_Store
+*.log

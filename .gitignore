@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+server/dev.sqlite3
+server/*.sqlite3
+
+# Build output (rebuilt on deploy)
+server/public/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+.tmp/
+
+# Test server (contains hardcoded secrets — never deploy)
+server/test-server.js
