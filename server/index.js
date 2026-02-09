@@ -29,6 +29,11 @@ if (isProduction) {
     console.error('FATAL: JWT_SECRET is required in production');
     process.exit(1);
   }
+} else {
+  // Set default JWT_SECRET for development if not provided
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'taulia-dev-secret-change-in-production';
+  }
 }
 
 // HTTPS redirect in production
@@ -50,7 +55,7 @@ if (isProduction) {
 app.use(helmet());
 
 app.use(cors({
-  origin: clientUrl,
+  origin: isProduction ? true : clientUrl,
   credentials: true,
 }));
 
@@ -108,8 +113,26 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
-  console.log(`Taulia Showcase Server running on ${HOST}:${PORT}`);
-});
+// Run database migrations and seeds before starting server
+async function startServer() {
+  try {
+    console.log('Running database migrations...');
+    await db.migrate.latest();
+    console.log('Migrations complete.');
+
+    console.log('Running database seeds...');
+    await db.seed.run();
+    console.log('Seeds complete.');
+
+    app.listen(PORT, HOST, () => {
+      console.log(`Taulia Showcase Server running on ${HOST}:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 module.exports = { app, db };

@@ -8,10 +8,10 @@ module.exports = {
       filename: process.env.DB_FILE || path.join(__dirname, 'dev.sqlite3'),
     },
     migrations: {
-      directory: './migrations',
+      directory: path.join(__dirname, 'migrations'),
     },
     seeds: {
-      directory: './seeds',
+      directory: path.join(__dirname, 'seeds'),
     },
     useNullAsDefault: true,
   },
@@ -22,10 +22,10 @@ module.exports = {
       filename: process.env.DB_FILE || path.join(__dirname, 'dev.sqlite3'),
     },
     migrations: {
-      directory: './migrations',
+      directory: path.join(__dirname, 'migrations'),
     },
     seeds: {
-      directory: './seeds',
+      directory: path.join(__dirname, 'seeds'),
     },
     useNullAsDefault: true,
   },

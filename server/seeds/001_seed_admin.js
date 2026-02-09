@@ -2,18 +2,18 @@ const bcrypt = require('bcryptjs');
 
 exports.seed = async function(knex) {
   // Check if admin already exists
-  const adminExists = await knex('users').where('email', 'admin@taulia.com').first();
+  const adminExists = await knex('users').where('email', 'admin@example.com').first();
   if (adminExists) {
     return;
   }
 
   const adminId = 'admin-001';
-  const password = await bcrypt.hash('admin123', 10);
+  const password = await bcrypt.hash('password123', 10);
 
   // Insert admin user
   await knex('users').insert({
     id: adminId,
-    email: 'admin@taulia.com',
+    email: 'admin@example.com',
     name: 'Admin User',
     password_hash: password,
     role: 'admin',
