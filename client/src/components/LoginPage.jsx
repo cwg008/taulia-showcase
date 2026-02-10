@@ -75,6 +75,9 @@ export default function LoginPage() {
           <p style={{ color: 'var(--taulia-light-text)', fontSize: '14px' }}>
             Admin Portal
           </p>
+          <p style={{ color: 'var(--taulia-light-text)', fontSize: '11px', marginTop: '4px', opacity: 0.6 }}>
+            v1.1.0
+          </p>
         </div>
 
         {error && <div className="error-message">{error}</div>}

@@ -1,11 +1,29 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { createAuditLog } = require('../middleware/auditLog');
 
 const router = express.Router();
+
+// Password strength validator
+const passwordValidator = body('password')
+  .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+  .matches(/[A-Z]/).withMessage('Password must contain an uppercase letter')
+  .matches(/[a-z]/).withMessage('Password must contain a lowercase letter')
+  .matches(/[0-9]/).withMessage('Password must contain a number');
+
+// Timing-safe token comparison
+const safeCompare = (a, b) => {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+};
 
 const getCookieOptions = () => ({
   httpOnly: true,
@@ -30,15 +48,19 @@ router.post('/login', [
     const user = await db('users').where('email', email).first();
 
     if (!user) {
+      // Audit log: failed login (unknown email)
+      await createAuditLog(null, 'auth:login_failed', 'user', null, { email, reason: 'unknown_email' }, req.ip);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     if (!user.is_active) {
+      await createAuditLog(user.id, 'auth:login_failed', 'user', user.id, { email, reason: 'inactive_account' }, req.ip);
       return res.status(403).json({ error: 'User account is not active' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
+      await createAuditLog(user.id, 'auth:login_failed', 'user', user.id, { email, reason: 'wrong_password' }, req.ip);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
@@ -47,6 +69,9 @@ router.post('/login', [
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRY || '24h' }
     );
+
+    // Audit log: successful login
+    await createAuditLog(user.id, 'auth:login', 'user', user.id, { email: user.email }, req.ip);
 
     res.cookie('token', token, getCookieOptions());
     res.json({
@@ -64,7 +89,17 @@ router.post('/login', [
 });
 
 // POST /logout
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+  // Try to log who is logging out
+  try {
+    const token = req.cookies.token;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      await createAuditLog(decoded.id, 'auth:logout', 'user', decoded.id, {}, req.ip);
+    }
+  } catch (e) {
+    // Token may be expired or invalid - that's fine, still clear cookie
+  }
   res.clearCookie('token', { path: '/' });
   res.json({ message: 'Logged out' });
 });
@@ -90,7 +125,9 @@ router.get('/validate-invite', async (req, res) => {
       return res.status(400).json({ error: 'Token is required' });
     }
 
-    const user = await db('users').where('invite_token', token).first();
+    // Timing-safe token comparison
+    const pendingUsers = await db('users').whereNotNull('invite_token');
+    const user = pendingUsers.find(u => safeCompare(u.invite_token, token));
 
     if (!user) {
       return res.status(404).json({ error: 'Invalid invite token' });
@@ -106,7 +143,7 @@ router.get('/validate-invite', async (req, res) => {
 // POST /accept-invite
 router.post('/accept-invite', [
   body('token').notEmpty(),
-  body('password').isLength({ min: 8 }),
+  passwordValidator,
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -115,7 +152,10 @@ router.post('/accept-invite', [
 
   try {
     const { token, password } = req.body;
-    const user = await db('users').where('invite_token', token).first();
+
+    // Find all users with pending invite tokens and use timing-safe compare
+    const pendingUsers = await db('users').whereNotNull('invite_token');
+    const user = pendingUsers.find(u => safeCompare(u.invite_token, token));
 
     if (!user) {
       return res.status(404).json({ error: 'Invalid invite token' });

@@ -93,12 +93,18 @@ router.get('/:token/serve/*', async (req, res) => {
       return res.status(404).json({ error: 'Prototype not found' });
     }
 
-    // Construct safe file path
-    const uploadsDir = path.join(__dirname, '..', 'uploads', 'prototypes', prototype.id);
-    const fullPath = path.join(uploadsDir, filePath);
+    // Construct safe file path with enhanced traversal protection
+    const uploadsDir = path.resolve(__dirname, '..', 'uploads', 'prototypes', prototype.id);
 
-    // Security: prevent directory traversal
-    if (!fullPath.startsWith(uploadsDir)) {
+    // Reject obvious traversal attempts before path resolution
+    if (filePath.includes('..') || filePath.includes('\0')) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const fullPath = path.resolve(uploadsDir, filePath);
+
+    // Security: strict directory containment check after resolution
+    if (!fullPath.startsWith(uploadsDir + path.sep) && fullPath !== uploadsDir) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -106,6 +112,9 @@ router.get('/:token/serve/*', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
+    // Set security headers for served files
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
     res.sendFile(fullPath);
   } catch (error) {
     console.error('Serve file error:', error.message);
