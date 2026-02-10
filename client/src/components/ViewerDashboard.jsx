@@ -138,14 +138,14 @@ const ViewerDashboard = () => {
                 {proto.access_request_status === 'pending' && (
                   <div style={{ background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>&#9203;</span>
-                    <span>Access request pending — awaiting admin approval</span>
+                    <span>Access request pending â awaiting admin approval</span>
                   </div>
                 )}
 
                 {proto.access_request_status === 'approved' && (
                   <div style={{ background: '#f0fdf4', border: '1px solid #16a34a', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>&#10003;</span>
-                    <span>Access approved — refresh to view</span>
+                    <span>Access approved â refresh to view</span>
                   </div>
                 )}
 
@@ -209,7 +209,7 @@ const ViewerDashboard = () => {
       </div>
 
       <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px', borderTop: '1px solid #e2e8f0', marginTop: '40px' }}>
-        Taulia Prototype Showcase v1.3.2
+        Taulia Prototype Showcase v1.3.3
       </div>
     </div>
   );

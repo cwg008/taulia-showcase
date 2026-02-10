@@ -9,7 +9,7 @@ const { createAuditLog } = require('../middleware/auditLog');
 
 const router = express.Router();
 
-// Configure multer for file uploads (memory storage — we write to disk ourselves)
+// Configure multer for file uploads (memory storage â we write to disk ourselves)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
@@ -41,10 +41,11 @@ router.get('/', authenticate, async (req, res) => {
 // POST / - Create new prototype with file upload
 router.post('/', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
   try {
-    const { title, description, status, type, is_top_secret } = req.body;
+    const { title, status, type, is_top_secret } = req.body;
+    const description = req.body.description || '';
 
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required' });
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
     }
 
     const slug = title.toLowerCase().replace(/\s+/g, '-');
@@ -87,7 +88,7 @@ router.post('/', authenticate, requireAdmin, upload.single('file'), async (req, 
         });
       } catch (uploadError) {
         console.error('Upload file save error:', uploadError.message);
-        // Continue without file — it's optional
+        // Continue without file â it's optional
       }
     }
 
@@ -218,6 +219,20 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     console.error('Delete prototype error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Multer error handling middleware
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File is too large. Maximum size is 50MB.' });
+    }
+    return res.status(400).json({ error: 'File upload error: ' + err.message });
+  }
+  if (err && err.message === 'Only .html and .zip files are allowed') {
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
 });
 
 module.exports = router;

@@ -58,8 +58,8 @@ const PrototypeList = ({ onSelectPrototype }) => {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!uploadData.file || !uploadData.title) {
-      setError('Please fill in all fields');
+    if (!uploadData.file || !uploadData.title || !uploadData.description) {
+      setError('Please fill in all required fields (file, title, and description)');
       return;
     }
 

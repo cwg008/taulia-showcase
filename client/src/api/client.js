@@ -64,7 +64,16 @@ const apiClient = {
       body: formData,
     });
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch (e) {
+        // Could not parse error response
+      }
+      throw new Error(errorMessage);
     }
     return response.json();
   },

@@ -77,7 +77,7 @@ export default function LoginPage() {
             Admin Portal
           </p>
           <p style={{ color: 'var(--taulia-light-text)', fontSize: '11px', marginTop: '4px', opacity: 0.6 }}>
-            v1.3.2
+            v1.3.3
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export default function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="â¢â¢â¢â¢â¢â¢â¢â¢"
                 required
                 style={{ paddingRight: '44px' }}
               />
