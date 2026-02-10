@@ -248,7 +248,8 @@ router.get('/:token/feedback', async (req, res) => {
       : null;
 
     res.json({
-      feedback,stats: {
+      feedback,
+      stats: {
         totalCount: feedback.length,
         averageRating: avgRating ? parseFloat(avgRating) : null,
         ratingCount: ratingsOnly.length,

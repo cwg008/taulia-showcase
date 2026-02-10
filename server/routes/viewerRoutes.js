@@ -72,11 +72,7 @@ router.get('/prototypes/:id', authenticate, requireViewer, async (req, res) => {
 
     res.json({
       prototype,
-      feedback,stats: {
-        totalCount: feedback.length,
-        averageRating: null,
-        ratingCount: 0,
-      },
+      feedback,
     });
   } catch (error) {
     console.error('Get viewer prototype detail error:', error.message);

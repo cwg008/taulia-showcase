@@ -129,7 +129,7 @@ exports.seed = async function(knex) {
     {
       id: 'feedback-002',
       prototype_id: proto1Id,
-      magic_link_id: 'link-001',
+      magic_link id: 'link-001',
       category: 'feature-request',
       message: 'It would be great to have an export-to-CSV feature for the payment data. Our finance team needs this for reporting.',
       contact_email: 'bob@globex.com',
@@ -140,7 +140,7 @@ exports.seed = async function(knex) {
     {
       id: 'feedback-003',
       prototype_id: proto2Id,
-      magic_link_id: 'link-002',
+      magic_link id: 'link-002',
       category: 'general-feedback',
       message: 'The supplier portal redesign looks modern and user-friendly. Much better than the current version.',
       contact_email: null,

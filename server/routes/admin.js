@@ -367,7 +367,8 @@ router.get('/prototypes/:id/feedback', authenticate, requireAdmin, async (req, r
       : null;
 
     res.json({
-      feedback,stats: {
+      feedback,
+      stats: {
         totalCount: feedback.length,
         averageRating: avgRating ? parseFloat(avgRating) : null,
         ratingCount: ratingsOnly.length,
