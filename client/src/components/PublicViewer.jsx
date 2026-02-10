@@ -61,24 +61,22 @@ const PublicViewer = ({ token }) => {
         }}
       >
         <div style={{ fontSize: '18px', fontWeight: '600' }}>
-          {metadata?.prototypeTitle || 'Prototype Viewer'}
+          {metadata?.prototype?.title || 'Prototype Viewer'}
         </div>
         <div style={{ fontSize: '12px', opacity: 0.8 }}>
           Powered by Taulia
         </div>
       </div>
 
-      {metadata?.previewUrl && (
-        <iframe
-          src={metadata.previewUrl}
-          style={{
-            flex: 1,
-            border: 'none',
-            width: '100%',
-          }}
-          title="Prototype"
-        />
-      )}
+      <iframe
+        src={`/api/viewer/${token}/serve/index.html`}
+        style={{
+          flex: 1,
+          border: 'none',
+          width: '100%',
+        }}
+        title="Prototype"
+      />
     </div>
   );
 };
