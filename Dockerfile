@@ -31,7 +31,8 @@ COPY server/ ./server/
 COPY --from=client-builder /app/server/public ./server/public
 
 RUN mkdir -p ./server/uploads && \
-    chown -R appuser:appgroup ./server/uploads
+    chown -R appuser:appgroup ./server/uploads && \
+    chown appuser:appgroup ./server
 
 # Switch to non-root user
 USER appuser
