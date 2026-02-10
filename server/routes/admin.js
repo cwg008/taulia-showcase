@@ -11,7 +11,17 @@ const router = express.Router();
 router.get('/users', authenticate, requireAdmin, async (req, res) => {
   try {
     const users = await db('users').select('id', 'email', 'name', 'role', 'is_active', 'created_at', 'updated_at');
-    res.json({ users });
+    // Transform snake_case to camelCase and fix SQLite booleans
+    const transformed = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      isActive: !!user.is_active,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+    }));
+    res.json({ users: transformed });
   } catch (error) {
     console.error('Get users error:', error.message);
     res.status(500).json({ error: 'Internal server error' });

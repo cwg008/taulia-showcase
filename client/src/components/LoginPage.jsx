@@ -114,16 +114,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p
-          style={{
-            fontSize: '12px',
-            color: 'var(--taulia-light-text)',
-            marginTop: '20px',
-            textAlign: 'center',
-          }}
-        >
-          Demo: admin@example.com / password123
-        </p>
       </div>
     </div>
   );

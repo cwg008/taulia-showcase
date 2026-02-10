@@ -25,7 +25,21 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
       )
       .orderBy('magic_links.created_at', 'desc');
 
-    res.json({ links });
+    // Transform snake_case to camelCase and fix SQLite booleans
+    const transformed = links.map(link => ({
+      id: link.id,
+      token: link.token,
+      prototypeId: link.prototype_id,
+      prototypeTitle: link.prototype_title,
+      label: link.label,
+      createdBy: link.created_by,
+      expiresAt: link.expires_at,
+      isActive: !link.is_revoked,
+      viewCount: link.view_count,
+      createdAt: link.created_at,
+    }));
+
+    res.json({ links: transformed });
   } catch (error) {
     console.error('Get magic links error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
