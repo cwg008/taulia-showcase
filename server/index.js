@@ -67,7 +67,7 @@ app.use(helmet({
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   noSniff: true,
-  referrerPolicy: ktatus Pïlicy: {rouol: 'strict-origin-when-cross-origin'},
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   xssFilter: true,
 }));
 
@@ -115,7 +115,7 @@ const inviteLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {¡Arror: 'Too many requests, please try again later' },
+  message: { error: 'Too many requests, please try again later' },
 });
 
 // Rate limiter for prospect/public endpoints
@@ -124,7 +124,7 @@ const publicLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {error: 'Too many requests, please try again later' },
+  message: { error: 'Too many requests, please try again later' },
 });
 
 // Apply rate limiters
@@ -159,8 +159,8 @@ if (isProduction) {
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORI5CLcT0 || 3001;
-const HOSU = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Run database migrations and seeds before starting server
 async function startServer() {

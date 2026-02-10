@@ -80,4 +80,109 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
         <div className="card-header">
           <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {prototype.title}
-            {!!prototype.is_top_secret && (<span style={{ background: '#dc2626', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px' }}>TOP TIEU=!
+            {!!prototype.is_top_secret && (<span style={{ background: '#dc2626', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px' }}>TOP SECRET</span>)}
+          </span>
+        </div>
+        <div className="card-body">
+          <p>{prototype.description}</p>
+          <div style={{ marginTop: '20px' }}>
+            <p><strong>Status:</strong> <span className="badge badge-primary">{prototype.status}</span></p>
+            <p><strong>Created:</strong> {new Date(prototype.created_at || prototype.createdAt).toLocaleDateString()}</p>
+          </div>
+          <div style={{ marginTop: '20px', padding: '15px', background: prototype.is_top_secret ? '#fef2f2' : '#f0fdf4', borderRadius: '8px', border: `1px solid ${prototype.is_top_secret ? '#fecaca' : '#bbf7d0'}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <strong style={{ color: prototype.is_top_secret ? '#dc2626' : '#16a34a' }}>{prototype.is_top_secret ? 'Top Secret Prototype' : 'Standard Prototype'}</strong>
+                <p style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>{prototype.is_top_secret ? 'Prospects must request and be granted access before viewing.' : 'Any prospect with a magic link can view this prototype.'}</p>
+              </div>
+              <button className={prototype.is_top_secret ? 'btn-secondary btn-small' : 'btn-primary btn-small'} onClick={handleToggleTopSecret} disabled={togglingSecret} style={prototype.is_top_secret ? {} : { background: '#dc2626', borderColor: '#dc2626' }}>
+                {togglingSecret ? 'Updating...' : (prototype.is_top_secret ? 'Remove Top Secret' : 'Mark Top Secret')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Access Requests */}
+      {!!prototype.is_top_secret && (
+        <div className="card">
+          <div className="card-header">Pending Access Requests ({accessRequests.length})</div>
+          {accessRequests.length > 0 ? (
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Reason</th><th>Requested</th><th>Actions</th></tr></thead>
+              <tbody>
+                {accessRequests.map((req) => (
+                  <tr key={req.id}>
+                    <td>{req.requester_name}</td><td>{req.requester_email}</td><td>{req.requester_company || '-'}</td>
+                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{req.reason || '-'}</td>
+                    <td>{new Date(req.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="btn-primary btn-small" style={{ background: '#16a34a', borderColor: '#16a34a' }} onClick={() => handleReviewRequest(req.id, 'approved')}>Approve</button>
+                        <button className="btn-secondary btn-small" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleReviewRequest(req.id, 'denied')}>Deny</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (<div className="card-body">No pending access requests.</div>)}
+        </div>
+      )}
+
+      {/* Feedback Section */}
+      <div className="card">
+        <div className="card-header">
+          <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            Prospect Feedback ({feedback.length})
+            {feedbackStats && feedbackStats.averageRating && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '400' }}>
+                <StarDisplay rating={Math.round(feedbackStats.averageRating)} />
+                <span>{feedbackStats.averageRating} avg</span>
+              </span>
+            )}
+          </span>
+        </div>
+        {feedback.length > 0 ? (
+          <table>
+            <thead><tr><th>Reviewer</th><th>Rating</th><th>Category</th><th>Message</th><th>Email</th><th>Date</th></tr></thead>
+            <tbody>
+              {feedback.map((fb) => (
+                <tr key={fb.id}>
+                  <td>{fb.reviewer_name || 'Anonymous'}</td>
+                  <td>{fb.rating ? <StarDisplay rating={fb.rating} /> : '-'}</td>
+                  <td><span className="badge badge-primary" style={{ fontSize: '11px' }}>{fb.category}</span></td>
+                  <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fb.message}</td>
+                  <td>{fb.contact_email || '-'}</td>
+                  <td>{new Date(fb.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (<div className="card-body">No feedback received yet.</div>)}
+      </div>
+
+      {/* Magic Links */}
+      <div className="card">
+        <div className="card-header">Magic Links ({links.length})</div>
+        {links.length > 0 ? (
+          <table>
+            <thead><tr><th>Token</th><th>Views</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>
+              {links.map((link, idx) => (
+                <tr key={idx}>
+                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{link.token.substring(0, 20)}...</td>
+                  <td>{link.viewCount}</td>
+                  <td>{new Date(link.createdAt).toLocaleDateString()}</td>
+                  <td><button className="btn-primary btn-small" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/viewer/${link.token}`)}>Copy Link</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (<div className="card-body">No magic links created for this prototype yet.</div>)}
+      </div>
+    </div>
+  );
+};
+
+export default PrototypeDetail;
