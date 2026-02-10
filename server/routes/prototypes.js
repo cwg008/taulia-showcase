@@ -2,12 +2,27 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const db = require('../config/database');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
-const { handleUpload } = require('../services/uploadService');
 
 const router = express.Router();
+
+// Configure multer for file uploads (memory storage — we write to disk ourselves)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.html', '.htm', '.zip'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .html and .zip files are allowed'));
+    }
+  },
+});
 
 // GET / - List all prototypes
 router.get('/', authenticate, async (req, res) => {
@@ -24,7 +39,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // POST / - Create new prototype with file upload
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
   try {
     const { title, description, status, type, is_top_secret } = req.body;
 
@@ -36,7 +51,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
     const prototypeId = require('crypto').randomBytes(8).toString('hex');
 
     // Create prototype record
-    const [id] = await db('prototypes').insert({
+    await db('prototypes').insert({
       id: prototypeId,
       title,
       description,
@@ -46,19 +61,33 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       file_path: null,
       thumbnail_path: null,
       version: 1,
-      is_top_secret: is_top_secret ? true : false,
+      is_top_secret: is_top_secret === 'true' || is_top_secret === true ? true : false,
       created_by: req.user.id,
       created_at: new Date(),
       updated_at: new Date(),
     });
 
     // Handle file upload if present
-    if (req.body.uploadFile) {
+    if (req.file) {
       try {
-        await handleUpload(req, id, prototypeId);
+        const uploadsDir = path.join(__dirname, '..', 'uploads', 'prototypes', prototypeId);
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const fileName = ext === '.zip' ? req.file.originalname : 'index.html';
+        const filePath = path.join(uploadsDir, fileName);
+        fs.writeFileSync(filePath, req.file.buffer);
+
+        // Update prototype record with file path
+        await db('prototypes').where('id', prototypeId).update({
+          file_path: `uploads/prototypes/${prototypeId}/${fileName}`,
+          updated_at: new Date(),
+        });
       } catch (uploadError) {
-        console.error('Upload error:', uploadError.message);
-        // Continue without file - it's optional
+        console.error('Upload file save error:', uploadError.message);
+        // Continue without file — it's optional
       }
     }
 
@@ -67,7 +96,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       'prototype:create',
       'prototype',
       prototypeId,
-      { title, type, is_top_secret: !!is_top_secret },
+      { title, type, is_top_secret: is_top_secret === 'true' || is_top_secret === true },
       req.ip
     );
 
@@ -80,7 +109,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
         status: status || 'draft',
         type: type || 'prototype',
         version: 1,
-        is_top_secret: !!is_top_secret,
+        is_top_secret: is_top_secret === 'true' || is_top_secret === true,
       },
     });
   } catch (error) {
