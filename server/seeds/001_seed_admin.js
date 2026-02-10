@@ -2,18 +2,18 @@ const bcrypt = require('bcryptjs');
 
 exports.seed = async function(knex) {
   // Check if admin already exists
-  const adminExists = await knex('users').where('email', 'admin@example.com').first();
+  const adminExists = await knex('users').where('email', 'admin@taulia.com').first();
   if (adminExists) {
     return;
   }
 
   const adminId = 'admin-001';
-  const password = await bcrypt.hash('password123', 10);
+  const password = await bcrypt.hash('Taulia26!', 10);
 
   // Insert admin user
   await knex('users').insert({
     id: adminId,
-    email: 'admin@example.com',
+    email: 'admin@taulia.com',
     name: 'Admin User',
     password_hash: password,
     role: 'admin',
@@ -119,9 +119,9 @@ exports.seed = async function(knex) {
       id: 'feedback-001',
       prototype_id: proto1Id,
       magic_link_id: 'link-001',
-      category: 'general-feedback',
+      category: 'general-feedback",
       message: 'Really impressed with the early payment dashboard! The UI is clean and intuitive. Would love to see more filtering options.',
-      contact_email: 'jane@acme.com',
+      contact_email: 'jane.smith@acme.com',
       rating: 5,
       reviewer_name: 'Jane Smith',
       created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
@@ -132,7 +132,7 @@ exports.seed = async function(knex) {
       magic_link_id: 'link-001',
       category: 'feature-request',
       message: 'It would be great to have an export-to-CSV feature for the payment data. Our finance team needs this for reporting.',
-      contact_email: 'bob@globex.com',
+      contact_email: 'bob.johnson@acme.com',
       rating: 4,
       reviewer_name: 'Bob Johnson',
       created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),

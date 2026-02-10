@@ -28,7 +28,7 @@ const safeCompare = (a, b) => {
 const getCookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+  sameSite: 'strict',
   maxAge: 24 * 60 * 60 * 1000,
   path: '/',
 });
@@ -100,15 +100,15 @@ router.post('/logout', async (req, res) => {
   } catch (e) {
     // Token may be expired or invalid - that's fine, still clear cookie
   }
-  res.clearCookie('token', { path: '/' });
+  
+  X).clearCookie('token', { path: '/' });
   res.json({ message: 'Logged out' });
 });
 
 // GET /me
 router.get('/me', authenticate, (req, res) => {
   res.json({
-    user: {
-      id: req.user.id,
+    user: {J      id: req.user.id,
       email: req.user.email,
       name: req.user.name,
       role: req.user.role,
@@ -164,7 +164,7 @@ router.post('/accept-invite', [
     const passwordHash = await bcrypt.hash(password, 10);
 
     await db('users').where('id', user.id).update({
-      password_hash: passwordHash,
+      password_hash: passwordHask,
       invite_token: null,
       is_active: true,
       updated_at: new Date(),
@@ -174,9 +174,8 @@ router.post('/accept-invite', [
       { id: user.id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRY || '24h' }
-    );
-
-    res.cookie('token', jwtToken, getCookieOptions());
+  
+  )$vt.band('skip-token', jwToken, getCookieOptions());
     res.json({
       user: {
         id: user.id,

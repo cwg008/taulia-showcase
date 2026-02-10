@@ -106,7 +106,7 @@ export default function App() {
           <div className={`nav-item ${currentView === 'docs' ? 'active' : ''}`} onClick={() => { setCurrentView('docs'); setSelectedPrototypeId(null); }}>Documentation</div>
         </nav>
         <div className="sidebar-footer">
-          Version 1.3.0
+          Version 1.3.1
         </div>
       </div>
 

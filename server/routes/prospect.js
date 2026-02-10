@@ -4,6 +4,17 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+// Strip HTML tags to prevent stored XSS
+const stripHtml = (str) => {
+  if (!str) return str;
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+};
+
 // GET /:token - Get prototype info for prospect view
 router.get('/:token', async (req, res) => {
   try {
@@ -75,10 +86,10 @@ router.get('/:token', async (req, res) => {
 
 // POST /:token/request-access - Submit access request for top-secret prototype
 router.post('/:token/request-access', [
-  body('name').notEmpty().withMessage('Name is required'),
+  body('name').notEmpty().withMessage('Name is required').isLength({ max: 200 }),
   body('email').isEmail().withMessage('Valid email is required'),
-  body('company').optional(),
-  body('reason').optional().isLength({ max: 2000 }),
+  body('company').optional().isLength({ max: 200 }),
+  body('reason').optional().isLength({ min: 10, max: 2000 }),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -134,10 +145,10 @@ router.post('/:token/request-access', [
       id: requestId,
       prototype_id: prototype.id,
       magic_link_id: link.id,
-      requester_name: name,
+      requester_name: stripHtml(name),
       requester_email: email,
-      requester_company: company || null,
-      reason: reason || null,
+      requester_company: company ? stripHtml(company) : null,
+      reason: reason ? stripHtml(reason) : null,
       status: 'pending',
       created_at: new Date(),
     });
@@ -199,10 +210,10 @@ router.post('/:token/feedback', [
       prototype_id: prototype.id,
       magic_link_id: link.id,
       category,
-      message,
+      message: stripHtml(message),
       contact_email: contactEmail || null,
       rating: rating || null,
-      reviewer_name: reviewerName || null,
+      reviewer_name: reviewerName ? stripHtml(reviewerName) : null,
       created_at: new Date(),
     });
 

@@ -73,7 +73,7 @@ router.post('/', authenticate, requireAdmin, [
       prototype_id: prototypeId,
       label,
       created_by: req.user.id,
-      expires_at: expiresAt || null,
+      expires_at: expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default 30-day expiry
       is_revoked: false,
       view_count: 0,
       created_at: new Date(),

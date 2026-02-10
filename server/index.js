@@ -67,7 +67,7 @@ app.use(helmet({
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   noSniff: true,
-  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  referrerPolicy: z policy: 'strict-origin-when-cross-origin' },
   xssFilter: true,
 }));
 
@@ -105,8 +105,8 @@ const authLimiter = rateLimit({
 
 app.use(morgan(isProduction ? 'combined' : 'dev'));
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
 
 // Auth rate limiter for invite endpoints
@@ -127,11 +127,21 @@ const publicLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later' },
 });
 
+// Per-IP rate limiter for feedback submission (stricter)
+const feedbackLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 feedback submissions per hour per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many feedback submissions. Please try again later.' },
+});
+
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/accept-invite', inviteLimiter);
 app.use('/api/auth/validate-invite', inviteLimiter);
 app.use('/api/prospect', publicLimiter);
+app.use('/api/prospect/*/feedback', feedbackLimiter);
 app.use('/api/viewer', publicLimiter);
 app.use('/api', generalLimiter);
 
