@@ -10,6 +10,7 @@ const PrototypeList = ({ onSelectPrototype }) => {
     title: '',
     description: '',
     file: null,
+    isTopSecret: false,
   });
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -68,9 +69,10 @@ const PrototypeList = ({ onSelectPrototype }) => {
       formData.append('file', uploadData.file);
       formData.append('title', uploadData.title);
       formData.append('description', uploadData.description);
+      formData.append('is_top_secret', uploadData.isTopSecret ? 'true' : 'false');
 
       await apiClient.postFormData('/api/prototypes', formData);
-      setUploadData({ title: '', description: '', file: null });
+      setUploadData({ title: '', description: '', file: null, isTopSecret: false });
       setShowUploadForm(false);
       fetchPrototypes();
     } catch (err) {
@@ -155,6 +157,34 @@ const PrototypeList = ({ onSelectPrototype }) => {
               />
             </div>
 
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={uploadData.isTopSecret}
+                  onChange={(e) => setUploadData({ ...uploadData, isTopSecret: e.target.checked })}
+                  style={{ width: 'auto', margin: 0 }}
+                />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Mark as Top Secret
+                  <span style={{
+                    background: '#dc2626',
+                    color: 'white',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    letterSpacing: '0.5px',
+                  }}>
+                    TOP SECRET
+                  </span>
+                </span>
+              </label>
+              <p style={{ fontSize: '12px', color: 'var(--taulia-light-text)', marginTop: '4px' }}>
+                Top-secret prototypes require prospects to request access before viewing.
+              </p>
+            </div>
+
             <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={uploading}>
               {uploading ? 'Uploading...' : 'Upload'}
             </button>
@@ -167,7 +197,24 @@ const PrototypeList = ({ onSelectPrototype }) => {
           {prototypes.map((proto) => (
             <div key={proto.id} className="grid-item">
               <div className="grid-item-header">
-                <div className="grid-item-title">{proto.title}</div>
+                <div className="grid-item-title">
+                  {proto.title}
+                  {!!proto.is_top_secret && (
+                    <span style={{
+                      background: '#dc2626',
+                      color: 'white',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      letterSpacing: '0.5px',
+                      marginLeft: '8px',
+                      verticalAlign: 'middle',
+                    }}>
+                      TOP SECRET
+                    </span>
+                  )}
+                </div>
                 <div className="grid-item-subtitle">
                   <span className="badge badge-primary">{proto.status}</span>
                 </div>

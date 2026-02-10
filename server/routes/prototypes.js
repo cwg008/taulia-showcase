@@ -13,7 +13,7 @@ const router = express.Router();
 router.get('/', authenticate, async (req, res) => {
   try {
     const prototypes = await db('prototypes')
-      .select('id', 'title', 'description', 'slug', 'status', 'type', 'version', 'created_by', 'created_at', 'updated_at')
+      .select('id', 'title', 'description', 'slug', 'status', 'type', 'version', 'is_top_secret', 'created_by', 'created_at', 'updated_at')
       .orderBy('created_at', 'desc');
 
     res.json({ prototypes });
@@ -26,7 +26,7 @@ router.get('/', authenticate, async (req, res) => {
 // POST / - Create new prototype with file upload
 router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { title, description, status, type } = req.body;
+    const { title, description, status, type, is_top_secret } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ error: 'Title and description are required' });
@@ -46,6 +46,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       file_path: null,
       thumbnail_path: null,
       version: 1,
+      is_top_secret: is_top_secret ? true : false,
       created_by: req.user.id,
       created_at: new Date(),
       updated_at: new Date(),
@@ -66,7 +67,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       'prototype:create',
       'prototype',
       prototypeId,
-      { title, type },
+      { title, type, is_top_secret: !!is_top_secret },
       req.ip
     );
 
@@ -79,6 +80,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
         status: status || 'draft',
         type: type || 'prototype',
         version: 1,
+        is_top_secret: !!is_top_secret,
       },
     });
   } catch (error) {
@@ -117,7 +119,7 @@ router.patch('/:id', authenticate, requireAdmin, [
 
   try {
     const { id } = req.params;
-    const { title, description, status } = req.body;
+    const { title, description, status, is_top_secret } = req.body;
 
     const prototype = await db('prototypes').where('id', id).first();
     if (!prototype) {
@@ -128,6 +130,7 @@ router.patch('/:id', authenticate, requireAdmin, [
     if (title) updates.title = title;
     if (description) updates.description = description;
     if (status) updates.status = status;
+    if (typeof is_top_secret === 'boolean') updates.is_top_secret = is_top_secret;
 
     await db('prototypes').where('id', id).update(updates);
 
@@ -156,6 +159,9 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     if (!prototype) {
       return res.status(404).json({ error: 'Prototype not found' });
     }
+
+    // Delete associated access requests
+    await db('prototype_access_requests').where('prototype_id', id).del();
 
     // Delete associated magic links
     await db('magic_links').where('prototype_id', id).del();

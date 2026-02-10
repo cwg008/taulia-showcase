@@ -7,6 +7,7 @@ import PrototypeDetail from './components/PrototypeDetail.jsx';
 import MagicLinkManager from './components/MagicLinkManager.jsx';
 import UserManager from './components/UserManager.jsx';
 import AuditLog from './components/AuditLog.jsx';
+import AccessRequests from './components/AccessRequests.jsx';
 import PublicViewer from './components/PublicViewer.jsx';
 import InviteAcceptPage from './components/InviteAcceptPage.jsx';
 import ProspectPortal from './components/ProspectPortal.jsx';
@@ -70,6 +71,8 @@ export default function App() {
         return <PrototypeList onSelectPrototype={setSelectedPrototypeId} />;
       case 'links':
         return <MagicLinkManager />;
+      case 'access-requests':
+        return <AccessRequests />;
       case 'users':
         return <UserManager />;
       case 'audit':
@@ -96,7 +99,7 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            📊 Dashboard
+            Dashboard
           </div>
           <div
             className={`nav-item ${currentView === 'prototypes' ? 'active' : ''}`}
@@ -105,7 +108,7 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            🖼️ Prototypes
+            Prototypes
           </div>
           <div
             className={`nav-item ${currentView === 'links' ? 'active' : ''}`}
@@ -114,7 +117,16 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            🔗 Magic Links
+            Magic Links
+          </div>
+          <div
+            className={`nav-item ${currentView === 'access-requests' ? 'active' : ''}`}
+            onClick={() => {
+              setCurrentView('access-requests');
+              setSelectedPrototypeId(null);
+            }}
+          >
+            Access Requests
           </div>
           <div
             className={`nav-item ${currentView === 'users' ? 'active' : ''}`}
@@ -123,7 +135,7 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            👥 Users
+            Users
           </div>
           <div
             className={`nav-item ${currentView === 'audit' ? 'active' : ''}`}
@@ -132,7 +144,7 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            📋 Audit Log
+            Audit Log
           </div>
           <div
             className={`nav-item ${currentView === 'docs' ? 'active' : ''}`}
@@ -141,11 +153,11 @@ export default function App() {
               setSelectedPrototypeId(null);
             }}
           >
-            📚 Documentation
+            Documentation
           </div>
         </nav>
         <div className="sidebar-footer">
-          Version 1.1.0
+          Version 1.2.0
         </div>
       </div>
 
@@ -155,6 +167,7 @@ export default function App() {
             {currentView === 'dashboard' && 'Dashboard'}
             {currentView === 'prototypes' && 'Prototypes'}
             {currentView === 'links' && 'Magic Links'}
+            {currentView === 'access-requests' && 'Access Requests'}
             {currentView === 'users' && 'User Management'}
             {currentView === 'audit' && 'Audit Log'}
             {currentView === 'docs' && 'Documentation'}

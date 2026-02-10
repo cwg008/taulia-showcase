@@ -185,6 +185,7 @@ router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
     const totalPrototypes = await db('prototypes').count('* as count').first();
     const totalLinks = await db('magic_links').count('* as count').first();
     const totalViews = await db('link_views').count('* as count').first();
+    const pendingRequests = await db('prototype_access_requests').where('status', 'pending').count('* as count').first();
 
     res.json({
       analytics: {
@@ -192,10 +193,99 @@ router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
         totalPrototypes: totalPrototypes.count,
         totalLinks: totalLinks.count,
         totalViews: totalViews.count,
+        pendingAccessRequests: pendingRequests.count,
       },
     });
   } catch (error) {
     console.error('Get analytics error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /access-requests - List all access requests
+router.get('/access-requests', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    let query = db('prototype_access_requests')
+      .leftJoin('prototypes', 'prototype_access_requests.prototype_id', 'prototypes.id')
+      .leftJoin('magic_links', 'prototype_access_requests.magic_link_id', 'magic_links.id')
+      .leftJoin('users', 'prototype_access_requests.reviewed_by', 'users.id')
+      .select(
+        'prototype_access_requests.id',
+        'prototype_access_requests.prototype_id',
+        'prototypes.title as prototype_title',
+        'prototype_access_requests.magic_link_id',
+        'magic_links.label as link_label',
+        'prototype_access_requests.requester_name',
+        'prototype_access_requests.requester_email',
+        'prototype_access_requests.requester_company',
+        'prototype_access_requests.reason',
+        'prototype_access_requests.status',
+        'prototype_access_requests.reviewed_by',
+        'users.email as reviewer_email',
+        'prototype_access_requests.reviewed_at',
+        'prototype_access_requests.created_at'
+      )
+      .orderBy('prototype_access_requests.created_at', 'desc');
+
+    if (status) {
+      query = query.where('prototype_access_requests.status', status);
+    }
+
+    const requests = await query.limit(500);
+
+    res.json({ requests });
+  } catch (error) {
+    console.error('Get access requests error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /access-requests/:id - Approve or deny an access request
+router.patch('/access-requests/:id', authenticate, requireAdmin, [
+  body('status').isIn(['approved', 'denied']),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const request = await db('prototype_access_requests').where('id', id).first();
+    if (!request) {
+      return res.status(404).json({ error: 'Access request not found' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ error: 'Request has already been reviewed' });
+    }
+
+    await db('prototype_access_requests').where('id', id).update({
+      status,
+      reviewed_by: req.user.id,
+      reviewed_at: new Date(),
+    });
+
+    await createAuditLog(
+      req.user.id,
+      `access-request:${status}`,
+      'access_request',
+      id,
+      {
+        requester_email: request.requester_email,
+        prototype_id: request.prototype_id,
+        decision: status,
+      },
+      req.ip
+    );
+
+    res.json({ message: `Access request ${status}` });
+  } catch (error) {
+    console.error('Review access request error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

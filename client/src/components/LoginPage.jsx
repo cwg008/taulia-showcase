@@ -76,7 +76,7 @@ export default function LoginPage() {
             Admin Portal
           </p>
           <p style={{ color: 'var(--taulia-light-text)', fontSize: '11px', marginTop: '4px', opacity: 0.6 }}>
-            v1.1.0
+            v1.2.0
           </p>
         </div>
 

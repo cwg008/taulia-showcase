@@ -5,6 +5,18 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+// Helper: check top-secret access for a magic link
+async function checkTopSecretAccess(prototype, link) {
+  if (!prototype.is_top_secret) return true;
+
+  const accessRequest = await db('prototype_access_requests')
+    .where('magic_link_id', link.id)
+    .where('status', 'approved')
+    .first();
+
+  return !!accessRequest;
+}
+
 // GET /:token - Validate magic link and return prototype metadata
 router.get('/:token', async (req, res) => {
   try {
@@ -34,18 +46,34 @@ router.get('/:token', async (req, res) => {
       return res.status(404).json({ error: 'Prototype not found or not published' });
     }
 
-    // Record view
-    await db('link_views').insert({
-      id: require('crypto').randomBytes(8).toString('hex'),
-      magic_link_id: link.id,
-      prototype_id: prototype.id,
-      ip_address: req.ip,
-      user_agent: req.get('user-agent'),
-      viewed_at: new Date(),
-    });
+    // Check top-secret access
+    const isTopSecret = !!prototype.is_top_secret;
+    let accessGranted = true;
+    let accessStatus = 'approved';
 
-    // Increment view count
-    await db('magic_links').where('id', link.id).increment('view_count', 1);
+    if (isTopSecret) {
+      const accessRequest = await db('prototype_access_requests')
+        .where('magic_link_id', link.id)
+        .orderBy('created_at', 'desc')
+        .first();
+
+      accessStatus = accessRequest ? accessRequest.status : null;
+      accessGranted = accessStatus === 'approved';
+    }
+
+    // Only record view if access is granted
+    if (accessGranted) {
+      await db('link_views').insert({
+        id: require('crypto').randomBytes(8).toString('hex'),
+        magic_link_id: link.id,
+        prototype_id: prototype.id,
+        ip_address: req.ip,
+        user_agent: req.get('user-agent'),
+        viewed_at: new Date(),
+      });
+
+      await db('magic_links').where('id', link.id).increment('view_count', 1);
+    }
 
     res.json({
       prototype: {
@@ -54,6 +82,11 @@ router.get('/:token', async (req, res) => {
         description: prototype.description,
         type: prototype.type,
         version: prototype.version,
+        is_top_secret: isTopSecret,
+      },
+      access: {
+        status: accessStatus,
+        granted: accessGranted,
       },
     });
   } catch (error) {
@@ -91,6 +124,12 @@ router.get('/:token/serve/*', async (req, res) => {
 
     if (!prototype) {
       return res.status(404).json({ error: 'Prototype not found' });
+    }
+
+    // Block serving files for top-secret prototypes without approved access
+    const hasAccess = await checkTopSecretAccess(prototype, link);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access not granted. Please request access first.' });
     }
 
     // Construct safe file path with enhanced traversal protection

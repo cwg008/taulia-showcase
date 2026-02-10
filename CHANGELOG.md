@@ -2,6 +2,27 @@
 
 All notable changes to the Taulia Prototype Showcase will be documented in this file.
 
+## [1.2.0] - 2026-02-09
+
+### Added
+- **Top Secret Prototypes**: Admins can mark prototypes as "top secret" during creation or on the detail page
+- **Access Request System**: Prospects viewing top-secret prototypes must submit an access request (name, email, company, reason)
+- **Admin Access Review**: New "Access Requests" page in the admin sidebar for reviewing, approving, and denying access requests
+- **Per-Prototype Access Requests**: Prototype detail page shows pending access requests for top-secret prototypes with inline approve/deny buttons
+- **Prospect Access Flow**: Public viewer shows access request form for top-secret prototypes, with pending/denied/approved states
+- **Access Control on File Serving**: Viewer file serving endpoint now blocks access to top-secret prototype files without an approved request
+- **Audit Logging**: Access request approvals and denials are recorded in the audit log
+- **Dashboard Analytics**: Pending access requests count added to the analytics dashboard
+- New database migration (003_top_secret) adding `is_top_secret` column to prototypes and `prototype_access_requests` table
+
+### Changed
+- Bumped version to 1.2.0 across package.json, login page, and sidebar
+- Updated in-app documentation with top-secret feature details and new API endpoints
+- Prototype list grid items now show a red "TOP SECRET" badge for marked prototypes
+- Prototype detail page includes a top-secret toggle and status indicator
+- Viewer route returns access status information for all prototypes
+- Prospect route returns access status and supports access request submission
+
 ## [1.1.0] - 2026-02-09
 
 ### Security
