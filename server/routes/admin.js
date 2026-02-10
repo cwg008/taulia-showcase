@@ -33,6 +33,7 @@ router.post('/users/invite', authenticate, requireAdmin, [
   body('email').isEmail(),
   body('name').notEmpty(),
   body('role').isIn(['admin', 'viewer']),
+  body('prototypeIds').optional().isArray(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -40,7 +41,7 @@ router.post('/users/invite', authenticate, requireAdmin, [
   }
 
   try {
-    const { email, name, role } = req.body;
+    const { email, name, role, prototypeIds } = req.body;
 
     const existingUser = await db('users').where('email', email).first();
     if (existingUser) {
@@ -48,8 +49,10 @@ router.post('/users/invite', authenticate, requireAdmin, [
     }
 
     const inviteToken = require('crypto').randomBytes(32).toString('hex');
+    const userId = require('crypto').randomBytes(8).toString('hex');
 
-    const [userId] = await db('users').insert({
+    await db('users').insert({
+      id: userId,
       email,
       name,
       role,
@@ -60,12 +63,24 @@ router.post('/users/invite', authenticate, requireAdmin, [
       updated_at: new Date(),
     });
 
+    // If viewer role and prototype IDs provided, create access entries
+    if (role === 'viewer' && prototypeIds && prototypeIds.length > 0) {
+      const accessEntries = prototypeIds.map(protoId => ({
+        id: require('crypto').randomBytes(8).toString('hex'),
+        user_id: userId,
+        prototype_id: protoId,
+        assigned_by: req.user.id,
+        created_at: new Date(),
+      }));
+      await db('user_prototype_access').insert(accessEntries);
+    }
+
     await createAuditLog(
       req.user.id,
       'user:invite',
       'user',
       userId,
-      { email, role },
+      { email, role, prototypeCount: prototypeIds ? prototypeIds.length : 0 },
       req.ip
     );
 
@@ -186,6 +201,14 @@ router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
     const totalLinks = await db('magic_links').count('* as count').first();
     const totalViews = await db('link_views').count('* as count').first();
     const pendingRequests = await db('prototype_access_requests').where('status', 'pending').count('* as count').first();
+    const totalFeedback = await db('prospect_feedback').count('* as count').first();
+
+    // Calculate average rating
+    const ratingResult = await db('prospect_feedback')
+      .whereNotNull('rating')
+      .avg('rating as avg')
+      .count('* as count')
+      .first();
 
     res.json({
       analytics: {
@@ -194,6 +217,9 @@ router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
         totalLinks: totalLinks.count,
         totalViews: totalViews.count,
         pendingAccessRequests: pendingRequests.count,
+        totalFeedback: totalFeedback.count,
+        averageRating: ratingResult.avg ? parseFloat(parseFloat(ratingResult.avg).toFixed(1)) : null,
+        ratingCount: ratingResult.count,
       },
     });
   } catch (error) {
@@ -286,6 +312,69 @@ router.patch('/access-requests/:id', authenticate, requireAdmin, [
     res.json({ message: `Access request ${status}` });
   } catch (error) {
     console.error('Review access request error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /feedback - List all feedback across prototypes
+router.get('/feedback', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { prototypeId } = req.query;
+
+    let query = db('prospect_feedback')
+      .leftJoin('prototypes', 'prospect_feedback.prototype_id', 'prototypes.id')
+      .select(
+        'prospect_feedback.id',
+        'prospect_feedback.prototype_id',
+        'prototypes.title as prototype_title',
+        'prospect_feedback.category',
+        'prospect_feedback.message',
+        'prospect_feedback.rating',
+        'prospect_feedback.reviewer_name',
+        'prospect_feedback.contact_email',
+        'prospect_feedback.created_at'
+      )
+      .orderBy('prospect_feedback.created_at', 'desc');
+
+    if (prototypeId) {
+      query = query.where('prospect_feedback.prototype_id', prototypeId);
+    }
+
+    const feedback = await query.limit(500);
+
+    res.json({ feedback });
+  } catch (error) {
+    console.error('Get feedback error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /prototypes/:id/feedback - Feedback for a specific prototype
+router.get('/prototypes/:id/feedback', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const feedback = await db('prospect_feedback')
+      .where('prototype_id', id)
+      .select('id', 'category', 'message', 'rating', 'reviewer_name', 'contact_email', 'created_at')
+      .orderBy('created_at', 'desc')
+      .limit(200);
+
+    // Calculate stats
+    const ratingsOnly = feedback.filter(f => f.rating != null);
+    const avgRating = ratingsOnly.length > 0
+      ? (ratingsOnly.reduce((sum, f) => sum + f.rating, 0) / ratingsOnly.length).toFixed(1)
+      : null;
+
+    res.json({
+      feedback,stats: {
+        totalCount: feedback.length,
+        averageRating: avgRating ? parseFloat(avgRating) : null,
+        ratingCount: ratingsOnly.length,
+      },
+    });
+  } catch (error) {
+    console.error('Get prototype feedback error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -12,13 +12,13 @@ import PublicViewer from './components/PublicViewer.jsx';
 import InviteAcceptPage from './components/InviteAcceptPage.jsx';
 import ProspectPortal from './components/ProspectPortal.jsx';
 import DocumentationView from './components/DocumentationView.jsx';
+import ViewerDashboard from './components/ViewerDashboard.jsx';
 
 export default function App() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedPrototypeId, setSelectedPrototypeId] = useState(null);
 
-  // Parse URL to determine view
   const path = window.location.pathname;
 
   if (loading) {
@@ -51,6 +51,11 @@ export default function App() {
   // Protected routes
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  // Viewer role gets their own dashboard
+  if (user?.role === 'viewer') {
+    return <ViewerDashboard />;
   }
 
   // Admin dashboard
@@ -92,72 +97,16 @@ export default function App() {
           Taulia
         </div>
         <nav className="sidebar-nav">
-          <div
-            className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('dashboard');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Dashboard
-          </div>
-          <div
-            className={`nav-item ${currentView === 'prototypes' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('prototypes');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Prototypes
-          </div>
-          <div
-            className={`nav-item ${currentView === 'links' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('links');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Magic Links
-          </div>
-          <div
-            className={`nav-item ${currentView === 'access-requests' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('access-requests');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Access Requests
-          </div>
-          <div
-            className={`nav-item ${currentView === 'users' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('users');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Users
-          </div>
-          <div
-            className={`nav-item ${currentView === 'audit' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('audit');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Audit Log
-          </div>
-          <div
-            className={`nav-item ${currentView === 'docs' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentView('docs');
-              setSelectedPrototypeId(null);
-            }}
-          >
-            Documentation
-          </div>
+          <div className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => { setCurrentView('dashboard'); setSelectedPrototypeId(null); }}>Dashboard</div>
+          <div className={`nav-item ${currentView === 'prototypes' ? 'active' : ''}`} onClick={() => { setCurrentView('prototypes'); setSelectedPrototypeId(null); }}>Prototypes</div>
+          <div className={`nav-item ${currentView === 'links' ? 'active' : ''}`} onClick={() => { setCurrentView('links'); setSelectedPrototypeId(null); }}>Magic Links</div>
+          <div className={`nav-item ${currentView === 'access-requests' ? 'active' : ''}`} onClick={() => { setCurrentView('access-requests'); setSelectedPrototypeId(null); }}>Access Requests</div>
+          <div className={`nav-item ${currentView === 'users' ? 'active' : ''}`} onClick={() => { setCurrentView('users'); setSelectedPrototypeId(null); }}>Users</div>
+          <div className={`nav-item ${currentView === 'audit' ? 'active' : ''}`} onClick={() => { setCurrentView('audit'); setSelectedPrototypeId(null); }}>Audit Log</div>
+          <div className={`nav-item ${currentView === 'docs' ? 'active' : ''}`} onClick={() => { setCurrentView('docs'); setSelectedPrototypeId(null); }}>Documentation</div>
         </nav>
         <div className="sidebar-footer">
-          Version 1.2.0
+          Version 1.3.0
         </div>
       </div>
 

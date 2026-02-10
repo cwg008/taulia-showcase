@@ -160,6 +160,8 @@ router.post('/:token/feedback', [
   body('category').isIn(['feature-request', 'bug-report', 'general-feedback', 'other']),
   body('message').notEmpty().isLength({ min: 10, max: 5000 }),
   body('contactEmail').optional().isEmail(),
+  body('rating').optional().isInt({ min: 1, max: 5 }),
+  body('reviewerName').optional().isLength({ max: 200 }),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -168,7 +170,7 @@ router.post('/:token/feedback', [
 
   try {
     const { token } = req.params;
-    const { category, message, contactEmail } = req.body;
+    const { category, message, contactEmail, rating, reviewerName } = req.body;
 
     const link = await db('magic_links')
       .where('token', token)
@@ -199,6 +201,8 @@ router.post('/:token/feedback', [
       category,
       message,
       contact_email: contactEmail || null,
+      rating: rating || null,
+      reviewer_name: reviewerName || null,
       created_at: new Date(),
     });
 
@@ -210,6 +214,48 @@ router.post('/:token/feedback', [
     });
   } catch (error) {
     console.error('Submit feedback error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /:token/feedback - List feedback for a prototype (public)
+router.get('/:token/feedback', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const link = await db('magic_links')
+      .where('token', token)
+      .first();
+
+    if (!link) {
+      return res.status(404).json({ error: 'Invalid link' });
+    }
+
+    if (link.is_revoked) {
+      return res.status(403).json({ error: 'Link has been revoked' });
+    }
+
+    const feedback = await db('prospect_feedback')
+      .where('prototype_id', link.prototype_id)
+      .select('id', 'category', 'message', 'rating', 'reviewer_name', 'created_at')
+      .orderBy('created_at', 'desc')
+      .limit(100);
+
+    // Calculate average rating
+    const ratingsOnly = feedback.filter(f => f.rating != null);
+    const avgRating = ratingsOnly.length > 0
+      ? (ratingsOnly.reduce((sum, f) => sum + f.rating, 0) / ratingsOnly.length).toFixed(1)
+      : null;
+
+    res.json({
+      feedback,stats: {
+        totalCount: feedback.length,
+        averageRating: avgRating ? parseFloat(avgRating) : null,
+        ratingCount: ratingsOnly.length,
+      },
+    });
+  } catch (error) {
+    console.error('Get feedback error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
