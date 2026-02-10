@@ -65,7 +65,7 @@ router.post('/users/invite', authenticate, requireAdmin, [
 
     // If viewer role and prototype IDs provided, create access entries
     if (role === 'viewer' && prototypeIds && prototypeIds.length > 0) {
-      const accessEntries = prototypeIds.map(protoId => ( {
+      const accessEntries = prototypeIds.map(protoId => ({
         id: require('crypto').randomBytes(8).toString('hex'),
         user_id: userId,
         prototype_id: protoId,
@@ -305,7 +305,7 @@ router.patch('/access-requests/:id', authenticate, requireAdmin, [
       `access-request:${status}`,
       'access_request',
       id,
-      z
+      {
         requester_email: request.requester_email,
         prototype_id: request.prototype_id,
         decision: status,

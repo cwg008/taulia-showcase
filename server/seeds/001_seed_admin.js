@@ -119,7 +119,7 @@ exports.seed = async function(knex) {
       id: 'feedback-001',
       prototype_id: proto1Id,
       magic_link_id: 'link-001',
-      category: 'general-feedback",
+      category: 'general-feedback',
       message: 'Really impressed with the early payment dashboard! The UI is clean and intuitive. Would love to see more filtering options.',
       contact_email: 'jane.smith@acme.com',
       rating: 5,

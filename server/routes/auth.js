@@ -100,15 +100,15 @@ router.post('/logout', async (req, res) => {
   } catch (e) {
     // Token may be expired or invalid - that's fine, still clear cookie
   }
-  
-  X).clearCookie('token', { path: '/' });
+  res.clearCookie('token', { path: '/' });
   res.json({ message: 'Logged out' });
 });
 
 // GET /me
 router.get('/me', authenticate, (req, res) => {
   res.json({
-    user: {J      id: req.user.id,
+    user: {
+      id: req.user.id,
       email: req.user.email,
       name: req.user.name,
       role: req.user.role,
@@ -164,7 +164,7 @@ router.post('/accept-invite', [
     const passwordHash = await bcrypt.hash(password, 10);
 
     await db('users').where('id', user.id).update({
-      password_hash: passwordHask,
+      password_hash: passwordHash,
       invite_token: null,
       is_active: true,
       updated_at: new Date(),
@@ -174,8 +174,9 @@ router.post('/accept-invite', [
       { id: user.id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRY || '24h' }
-  
-  )$vt.band('skip-token', jwToken, getCookieOptions());
+    );
+
+    res.cookie('token', jwtToken, getCookieOptions());
     res.json({
       user: {
         id: user.id,

@@ -174,3 +174,55 @@ router.get('/prototypes/:id', authenticate, requireViewer, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// GET /prototypes/:id/serve/* - Serve prototype files for viewer users
+router.get('/prototypes/:id/serve/*', authenticate, requireViewer, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check access
+    const access = await db('user_prototype_access')
+      .where('user_id', req.user.id)
+      .where('prototype_id', id)
+      .first();
+
+    if (!access) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const prototype = await db('prototypes').where('id', id).first();
+    if (!prototype) {
+      return res.status(404).json({ error: 'Prototype not found' });
+    }
+
+    const requestedFile = req.params[0] || 'index.html';
+    const path = require('path');
+    const fs = require('fs');
+
+    // Prevent path traversal - reject null bytes and double dots early
+    if (requestedFile.includes('\0') || requestedFile.includes('..')) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const safePath = path.normalize(requestedFile).replace(/^(\.\.(\/|\\|$))+/, '');
+    const uploadsDir = path.resolve(__dirname, '..', 'uploads', 'prototypes', id);
+    const filePath = path.resolve(uploadsDir, safePath);
+
+    // Strict containment: use path.relative to verify the file is within uploadsDir
+    const relPath = path.relative(uploadsDir, filePath);
+    if (relPath.startsWith('..') || path.isAbsolute(relPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Serve viewer file error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
