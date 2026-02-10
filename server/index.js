@@ -67,7 +67,7 @@ app.use(helmet({
   },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   noSniff: true,
-  referrerPolicy: z policy: 'strict-origin-when-cross-origin' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   xssFilter: true,
 }));
 
@@ -92,106 +92,35 @@ const generalLimiter = rateLimit({
   max: isProduction ? 100 : 500,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
-});
+  message: { error: 'Too many™\]Y\İËX\ÙHHYØZ[ˆ]\‰ÈKŸJNÂ‚˜ÛÛœİ]][Z]\ˆH˜]S[Z]
+ÂˆÚ[™İÓ\ÎˆMH
+ˆŒ
+ˆLˆX^ˆLˆİ[™\™XY\œÎˆYKˆYØXŞRXY\œÎˆ˜[ÙKˆY\ÜØYÙNˆÈ\œ›Üˆ	ÕÛÈX[H]][XØ][Ûˆ][\ËX\ÙHHYØZ[ˆ]\‰ÈKŸJNÂ‚˜\\ÙJ[Ü™Ø[Š\Ô›ÙXİ[ÛˆÈ	ØÛÛXš[™Y	Èˆ	Ù]‰ÊJNÂ˜\\ÙJÛÛÚÚYT\œÙ\Š
+JNÂ˜\\ÙJ^™\ÜËšœÛÛŠÈ[Z]ˆ	Ì[X‰ÈJJNÂ˜\\ÙJ^™\ÜË\›[˜ÛÙY
+È^[™YˆYK[Z]ˆ	Ì[X‰ÈJJNÂ˜\\ÙJ^™\ÜËœ˜]ÊÈ\Nˆ	Ø\XØ][Û‹ÛØİ]\İ™X[IË[Z]ˆ	ÌLX‰ÈJJNÂ‚‹ËÈ]]˜]H[Z]\ˆ›Üˆ[š]H[™Ú[Â˜ÛÛœİ[š]S[Z]\ˆH˜]S[Z]
+ÂˆÚ[™İÓ\ÎˆMH
+ˆŒ
+ˆLˆX^ˆŒˆİ[™\™XY\œÎˆYKˆYØXŞRXY\œÎˆ˜[ÙKˆY\ÜØYÙNˆÈ\œ›Üˆ	ÕÛÈX[H™\]Y\İËX\ÙHHYØZ[ˆ]\‰ÈKŸJNÂ‚‹ËÈ˜]H[Z]\ˆ›Üˆ›ÜÜXİÜX›XÈ[™Ú[Â˜ÛÛœİX›XÓ[Z]\ˆH˜]S[Z]
+ÂˆÚ[™İÓ\ÎˆMH
+ˆŒ
+ˆLˆX^ˆÌˆİ[™\™XY\œÎˆYKˆYØXŞRXY\œÎˆ˜[ÙKˆY\ÜØYÙNˆÈ\œ›Üˆ	ÕÛÈX[H™\]Y\İËX\ÙHHYØZ[ˆ]\‰ÈKŸJNÂ‚‹ËÈ\‹RT˜]H[Z]\ˆ›Üˆ™YY˜XÚÈİX›Z\ÜÚ[Ûˆ
+İšXİ\ŠB˜ÛÛœİ™YY˜XÚÓ[Z]\ˆH˜]S[Z]
+ÂˆÚ[™İÓ\ÎˆŒ
+ˆŒ
+ˆLËÈHİ\‚ˆX^ˆLËÈL™YY˜XÚÈİX›Z\ÜÚ[ÛœÈ\ˆİ\ˆ\ˆTˆİ[™\™XY\œÎˆYKˆYØXŞRXY\œÎˆ˜[ÙKˆY\ÜØYÙNˆÈ\œ›Üˆ	ÕÛÈX[H™YY˜XÚÈİX›Z\ÜÚ[ÛœËˆX\ÙHHYØZ[ˆ]\‹‰ÈKŸJNÂ‚‹ËÈ\H˜]H[Z]\œÂ˜\\ÙJ	ËØ\KØ]]ÛÙÚ[‰Ë]][Z]\ŠNÂ˜\\ÙJ	ËØ\KØ]]ØXØÙ\Z[š]IË[š]S[Z]\ŠNÂ˜\\ÙJ	ËØ\KØ]]İ˜[Y]KZ[š]IË[š]S[Z]\ŠNÂ˜\\ÙJ	ËØ\KÜ›ÜÜXİ	ËX›XÓ[Z]\ŠNÂ˜\\ÙJ	ËØ\KÜ›ÜÜXİÊ‹Ù™YY˜XÚÉË™YY˜XÚÓ[Z]\ŠNÂ˜\\ÙJ	ËØ\KİšY]Ù\‰ËX›XÓ[Z]\ŠNÂ˜\\ÙJ	ËØ\IËÙ[™\˜[[Z]\ŠNÂ‚‹ËÈTH›İ]\Â˜\\ÙJ	ËØ\KØ]]	Ë]]›İ]\ŠNÂ˜\\ÙJ	ËØ\KØYZ[‰ËYZ[”›İ]\ŠNÂ˜\\ÙJ	ËØ\KÜ›İİ\\ÉË›İİ\\Ô›İ]\ŠNÂ˜\\ÙJ	ËØ\KÛ[šÜÉËXYÚXÓ[šÜÔ›İ]\ŠNÂ˜\\ÙJ	ËØ\KİšY]Ù\‰ËšY]Ù\”›İ]\ŠNÂ˜\\ÙJ	ËØ\KÜ›ÜÜXİ	Ë›ÜÜXİ›İ]\ŠNÂ˜\\ÙJ	ËØ\KİšY]Ù\‹Y\Ú›Ø\™	ËšY]Ù\‘\Ú›İ]\ŠNÂ‚‹ËÈ›ÈÛ™Ù\ˆÙ\š[™È\ØYÈ\™XİHHš[\ÈÙ\™YÛ›H›İYÚ]][XØ]YšY]Ù\ˆ›İ]B‚‹ËÈÙ\™Hİ]XÈÛY[š[\È[ˆ›ÙXİ[Û‚šYˆ
+\Ô›ÙXİ[ÛŠHÂˆ\\ÙJ^™\ÜËœİ]XÊ]š›Ú[Š×Ù\›˜[YK	ÜX›XÉÊJJNÂˆ\™Ù]
+	Ê‰Ë
+™\K™\ÊHOˆÂˆYˆ
+\™\Kœ]œİ\ÕÚ]
+	ËØ\IÊH	‰ˆ\™\Kœ]œİ\ÕÚ]
+	Ëİ\ØYÉÊJHÂˆ™\ËœÙ[™š[J]š›Ú[Š×Ù\›˜[YK	ÜX›XÉË	Ú[™^š[	ÊJNÂˆBˆJNÂŸB‚‹ËÈ\œ›Üˆ[™\‚˜\\ÙJ\œ›Ü’[™\ŠNÂ‚˜ÛÛœİÔ•H›ØÙ\ÜË™[‹”Ô•ÌNÂ˜ÛÛœİÔÕH›ØÙ\ÜË™[‹’ÔÕ	ÌŒŒŒ	ÎÂ‚‹ËÈ[ˆ]X˜\ÙHZYÜ˜][ÛœÈ[™ÙYYÈ™Y›Ü™Hİ\[™ÈÙ\™\‚˜\Ş[˜È[˜İ[Ûˆİ\Ù\™\Š
+HÂˆHÂˆÛÛœÛÛK›ÙÊ	Ô[›š[™È]X˜\ÙHZYÜ˜][ÛœË‹‹‰ÊNÂˆ]ØZ]‹›ZYÜ˜]K›]\İ
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many authentication attempts, please try again later' },
-});
+NÂˆÛÛœÛÛK›ÙÊ	ÓZYÜ˜][ÛœÈÛÛ\]K‰ÊNÂ‚ˆÛÛœÛÛK›ÙÊ	Ô[›š[™È]X˜\ÙHÙYYË‹‹‰ÊNÂˆ]ØZ]‹œÙYYœ[Š
+NÂˆÛÛœÛÛK›ÙÊ	ÔÙYYÈÛÛ\]K‰ÊNÂ‚ˆ\›\İ[ŠÔ•ÔÕ
 
-app.use(morgan(isProduction ? 'combined' : 'dev'));
-app.use(cookieParser());
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
-
-// Auth rate limiter for invite endpoints
-const inviteLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
-});
-
-// Rate limiter for prospect/public endpoints
-const publicLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
-});
-
-// Per-IP rate limiter for feedback submission (stricter)
-const feedbackLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 feedback submissions per hour per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many feedback submissions. Please try again later.' },
-});
-
-// Apply rate limiters
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/accept-invite', inviteLimiter);
-app.use('/api/auth/validate-invite', inviteLimiter);
-app.use('/api/prospect', publicLimiter);
-app.use('/api/prospect/*/feedback', feedbackLimiter);
-app.use('/api/viewer', publicLimiter);
-app.use('/api', generalLimiter);
-
-// API routes
-app.use('/api/auth', authRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/prototypes', prototypesRouter);
-app.use('/api/links', magicLinksRouter);
-app.use('/api/viewer', viewerRouter);
-app.use('/api/prospect', prospectRouter);
-app.use('/api/viewer-dashboard', viewerDashRouter);
-
-// No longer serving uploads directly - files served only through authenticated viewer route
-
-// Serve static client files in production
-if (isProduction) {
-  app.use(express.static(path.join(__dirname, 'public')));
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    }
-  });
-}
-
-// Error handler
-app.use(errorHandler);
-
-const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || '0.0.0.0';
-
-// Run database migrations and seeds before starting server
-async function startServer() {
-  try {
-    console.log('Running database migrations...');
-    await db.migrate.latest();
-    console.log('Migrations complete.');
-
-    console.log('Running database seeds...');
-    await db.seed.run();
-    console.log('Seeds complete.');
-
-    app.listen(PORT, HOST, () => {
-      console.log(`Taulia Showcase Server running on ${HOST}:${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to initialize database:', err);
-    process.exit(1);
-  }
-}
-
-startServer();
-
-module.exports = { app, db };
+HOˆÂˆÛÛœÛÛK›ÙÊ][XHÚİØØ\ÙHÙ\™\ˆ[›š[™ÈÛˆ	ÒÔÕN‰ÔÔ•X
+NÂˆJNÂˆHØ]Ú
+\œŠHÂˆÛÛœÛÛK™\œ›ÜŠ	Ñ˜Z[YÈ[š]X[^™H]X˜\ÙN‰Ë\œŠNÂˆ›ØÙ\ÜË™^]
+JNÂˆBŸB‚œİ\Ù\™\Š
+NÂ‚›[Ù[K™^ÜÈHÈ\ˆNÂ
