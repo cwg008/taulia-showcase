@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import ProspectHomepage from './ProspectHomepage.jsx';
 
 const StarRating = ({ rating, onRate, interactive = false, size = 20 }) => {
   const [hover, setHover] = useState(0);
@@ -41,10 +42,18 @@ const PublicViewer = ({ token }) => {
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
   const [showFeedbackPanel, setShowFeedbackPanel] = useState(false);
 
+  const [isHomepage, setIsHomepage] = useState(false);
+
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
         const data = await apiClient.get(`/api/viewer/${token}`);
+        // Detect homepage link
+        if (data.type === 'homepage') {
+          setIsHomepage(true);
+          setLoading(false);
+          return;
+        }
         setMetadata(data);
         if (data.access) {
           if (data.access.granted) setRequestStatus('approved');
@@ -114,6 +123,11 @@ const PublicViewer = ({ token }) => {
 
   if (loading) {
     return (<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}><div className="spinner"></div></div>);
+  }
+
+  // Delegate to homepage view for general magic links
+  if (isHomepage) {
+    return <ProspectHomepage token={token} />;
   }
 
   if (error && !metadata) {

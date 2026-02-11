@@ -209,7 +209,7 @@ const ViewerDashboard = () => {
       </div>
 
       <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px', borderTop: '1px solid #e2e8f0', marginTop: '40px' }}>
-        Taulia Prototype Showcase v1.3.3
+        Taulia Prototype Showcase v1.3.4
       </div>
     </div>
   );

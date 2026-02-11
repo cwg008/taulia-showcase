@@ -46,9 +46,9 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// POST / - Create new magic link
+// POST / - Create new magic link (prototypeId optional — omit for homepage link)
 router.post('/', authenticate, requireAdmin, [
-  body('prototypeId').notEmpty(),
+  body('prototypeId').optional(),
   body('label').notEmpty(),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -59,18 +59,21 @@ router.post('/', authenticate, requireAdmin, [
   try {
     const { prototypeId, label, expiresAt } = req.body;
 
-    const prototype = await db('prototypes').where('id', prototypeId).first();
-    if (!prototype) {
-      return res.status(404).json({ error: 'Prototype not found' });
+    // If prototypeId is provided, validate the prototype exists
+    if (prototypeId) {
+      const prototype = await db('prototypes').where('id', prototypeId).first();
+      if (!prototype) {
+        return res.status(404).json({ error: 'Prototype not found' });
+      }
     }
 
     const token = require('crypto').randomBytes(32).toString('hex');
     const linkId = require('crypto').randomBytes(8).toString('hex');
 
-    const [id] = await db('magic_links').insert({
+    await db('magic_links').insert({
       id: linkId,
       token,
-      prototype_id: prototypeId,
+      prototype_id: prototypeId || null,
       label,
       created_by: req.user.id,
       expires_at: expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default 30-day expiry
@@ -84,7 +87,7 @@ router.post('/', authenticate, requireAdmin, [
       'link:create',
       'magic_link',
       linkId,
-      { prototypeId, label },
+      { prototypeId: prototypeId || 'homepage', label },
       req.ip
     );
 
@@ -92,7 +95,7 @@ router.post('/', authenticate, requireAdmin, [
       link: {
         id: linkId,
         token,
-        prototypeId,
+        prototypeId: prototypeId || null,
         label,
         isRevoked: false,
         viewCount: 0,

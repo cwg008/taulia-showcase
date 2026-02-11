@@ -1,6 +1,6 @@
 {
   "name": "taulia-showcase",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Taulia Prototype Showcase - Share interactive prototypes with customers and prospects",
   "private": true,
   "workspaces": [
