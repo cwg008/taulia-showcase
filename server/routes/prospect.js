@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
+const { sendSlackNotification } = require('../services/slackService');
 
 const router = express.Router();
 
@@ -153,6 +154,18 @@ router.post('/:token/request-access', [
       created_at: new Date(),
     });
 
+    // Non-blocking Slack notification
+    (async () => {
+      try {
+        await sendSlackNotification('access_request', {
+          prototypeTitle: prototype.title,
+          requesterName: name,
+          requesterEmail: email,
+          requesterCompany: company || null,
+        });
+      } catch (e) { /* non-critical */ }
+    })();
+
     res.status(201).json({
       request: {
         id: requestId,
@@ -216,6 +229,18 @@ router.post('/:token/feedback', [
       reviewer_name: reviewerName ? stripHtml(reviewerName) : null,
       created_at: new Date(),
     });
+
+    // Non-blocking Slack notification
+    (async () => {
+      try {
+        await sendSlackNotification('feedback', {
+          prototypeTitle: prototype.title,
+          rating: rating || null,
+          message: message.substring(0, 100),
+          contactEmail: contactEmail || null,
+        });
+      } catch (e) { /* non-critical */ }
+    })();
 
     res.status(201).json({
       feedback: {

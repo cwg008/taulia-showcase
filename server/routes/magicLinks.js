@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
@@ -9,7 +10,9 @@ const router = express.Router();
 // GET / - List all magic links with prototype info
 router.get('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const links = await db('magic_links')
+    const { search, active } = req.query;
+
+    let query = db('magic_links')
       .leftJoin('prototypes', 'magic_links.prototype_id', 'prototypes.id')
       .select(
         'magic_links.id',
@@ -21,9 +24,27 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
         'magic_links.expires_at',
         'magic_links.is_revoked',
         'magic_links.view_count',
-        'magic_links.created_at'
-      )
-      .orderBy('magic_links.created_at', 'desc');
+        'magic_links.created_at',
+        'magic_links.password_hash',
+        'magic_links.branding_config'
+      );
+
+    // Apply search filter
+    if (search) {
+      query = query.where((builder) => {
+        builder.where('magic_links.label', 'like', `%${search}%`)
+               .orWhere('magic_links.token', 'like', `%${search}%`);
+      });
+    }
+
+    // Apply active filter
+    if (active === 'true') {
+      query = query.where('magic_links.is_revoked', false);
+    } else if (active === 'false') {
+      query = query.where('magic_links.is_revoked', true);
+    }
+
+    const links = await query.orderBy('magic_links.created_at', 'desc');
 
     // Transform snake_case to camelCase and fix SQLite booleans
     const transformed = links.map(link => ({
@@ -37,6 +58,8 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
       isActive: !link.is_revoked,
       viewCount: link.view_count,
       createdAt: link.created_at,
+      isPasswordProtected: !!link.password_hash,
+      brandingConfig: link.branding_config ? JSON.parse(link.branding_config) : null,
     }));
 
     res.json({ links: transformed });
@@ -50,6 +73,8 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
 router.post('/', authenticate, requireAdmin, [
   body('prototypeId').optional(),
   body('label').notEmpty(),
+  body('brandingConfig').optional().isObject(),
+  body('password').optional().isString(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -57,7 +82,7 @@ router.post('/', authenticate, requireAdmin, [
   }
 
   try {
-    const { prototypeId, label, expiresAt } = req.body;
+    const { prototypeId, label, expiresAt, brandingConfig, password } = req.body;
 
     // If prototypeId is provided, validate the prototype exists
     if (prototypeId) {
@@ -70,6 +95,18 @@ router.post('/', authenticate, requireAdmin, [
     const token = require('crypto').randomBytes(32).toString('hex');
     const linkId = require('crypto').randomBytes(8).toString('hex');
 
+    // Hash password if provided
+    let passwordHash = null;
+    if (password) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    // Stringify branding config if provided
+    let brandingConfigStr = null;
+    if (brandingConfig) {
+      brandingConfigStr = JSON.stringify(brandingConfig);
+    }
+
     await db('magic_links').insert({
       id: linkId,
       token,
@@ -80,6 +117,8 @@ router.post('/', authenticate, requireAdmin, [
       is_revoked: false,
       view_count: 0,
       created_at: new Date(),
+      password_hash: passwordHash,
+      branding_config: brandingConfigStr,
     });
 
     await createAuditLog(
@@ -124,6 +163,58 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
     res.json({ link });
   } catch (error) {
     console.error('Get magic link error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /:id/branding - Update branding config for magic link
+router.patch('/:id/branding', authenticate, requireAdmin, [
+  body('primaryColor').optional().matches(/^#[0-9a-fA-F]{6}$/),
+  body('headerText').optional().isString(),
+  body('footerText').optional().isString(),
+  body('logoUrl').optional().isString(),
+  body('hideTaulia').optional().isBoolean(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { id } = req.params;
+
+    const link = await db('magic_links').where('id', id).first();
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
+    }
+
+    const { primaryColor, headerText, footerText, logoUrl, hideTaulia } = req.body;
+
+    const brandingConfig = {
+      primaryColor,
+      headerText,
+      footerText,
+      logoUrl,
+      hideTaulia,
+    };
+
+    await db('magic_links').where('id', id).update({
+      branding_config: JSON.stringify(brandingConfig),
+      updated_at: new Date(),
+    });
+
+    await createAuditLog(
+      req.user.id,
+      'link:update-branding',
+      'magic_link',
+      id,
+      { brandingConfig },
+      req.ip
+    );
+
+    res.json({ message: 'Branding updated successfully', brandingConfig });
+  } catch (error) {
+    console.error('Update branding error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

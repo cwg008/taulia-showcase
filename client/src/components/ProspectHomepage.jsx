@@ -5,6 +5,7 @@ const ProspectHomepage = ({ token }) => {
   const [prototypes, setPrototypes] = useState([]);
   const [restrictedPrototypes, setRestrictedPrototypes] = useState([]);
   const [linkInfo, setLinkInfo] = useState(null);
+  const [branding, setBranding] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewingPrototype, setViewingPrototype] = useState(null);
@@ -12,10 +13,33 @@ const ProspectHomepage = ({ token }) => {
   const [accessForm, setAccessForm] = useState({ name: '', email: '', company: '', reason: '' });
   const [submitting, setSubmitting] = useState(false);
   const [requestSuccess, setRequestSuccess] = useState(null);
+  // Identity gate state
+  const [showIdentityModal, setShowIdentityModal] = useState(false);
+  const [identityForm, setIdentityForm] = useState({ name: '', email: '', company: '' });
+  const [prospectIdentity, setProspectIdentity] = useState(null);
 
   useEffect(() => {
+    // Check for stored identity
+    const tokenPrefix = token.substring(0, 8);
+    const stored = localStorage.getItem(`taulia_prospect_${tokenPrefix}`);
+    if (stored) {
+      try {
+        setProspectIdentity(JSON.parse(stored));
+      } catch (e) { /* ignore */ }
+    }
     fetchHomepageData();
   }, [token]);
+
+  useEffect(() => {
+    // Show identity modal after loading if no stored identity
+    if (!loading && !error && !prospectIdentity) {
+      const tokenPrefix = token.substring(0, 8);
+      const stored = localStorage.getItem(`taulia_prospect_${tokenPrefix}`);
+      if (!stored) {
+        setShowIdentityModal(true);
+      }
+    }
+  }, [loading, error, prospectIdentity, token]);
 
   const fetchHomepageData = async () => {
     try {
@@ -23,11 +47,36 @@ const ProspectHomepage = ({ token }) => {
       setPrototypes(data.prototypes || []);
       setRestrictedPrototypes(data.restrictedPrototypes || []);
       setLinkInfo(data.link || null);
+      setBranding(data.branding || null);
     } catch (err) {
       setError('Failed to load prototypes. The link may be invalid or expired.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleIdentitySubmit = async (e) => {
+    e.preventDefault();
+    const identity = {
+      name: identityForm.name.trim(),
+      email: identityForm.email.trim(),
+      company: identityForm.company.trim(),
+    };
+    if (!identity.name && !identity.email) {
+      setShowIdentityModal(false);
+      return;
+    }
+    try {
+      await apiClient.post(`/api/viewer/${token}/identify`, identity);
+    } catch (e) { /* non-critical */ }
+    const tokenPrefix = token.substring(0, 8);
+    localStorage.setItem(`taulia_prospect_${tokenPrefix}`, JSON.stringify(identity));
+    setProspectIdentity(identity);
+    setShowIdentityModal(false);
+  };
+
+  const handleSkipIdentity = () => {
+    setShowIdentityModal(false);
   };
 
   const handleRequestAccess = async (e) => {
@@ -46,7 +95,6 @@ const ProspectHomepage = ({ token }) => {
       setRequestSuccess(requestingAccess);
       setRequestingAccess(null);
       setAccessForm({ name: '', email: '', company: '', reason: '' });
-      // Refresh data to update access statuses
       const data = await apiClient.get(`/api/viewer/${token}/homepage`);
       setRestrictedPrototypes(data.restrictedPrototypes || []);
     } catch (err) {
@@ -61,12 +109,17 @@ const ProspectHomepage = ({ token }) => {
     }
   };
 
+  const headerBg = branding?.primaryColor || '#1e293b';
+  const headerText = branding?.headerText || 'Taulia Prototypes';
+  const footerText = branding?.footerText || 'Powered by Taulia';
+  const hideTaulia = branding?.hideTaulia || false;
+
   // Fullscreen iframe overlay for viewing a prototype
   if (viewingPrototype) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <div style={{
-          background: '#1e293b', color: 'white', padding: '12px 20px',
+          background: headerBg, color: 'white', padding: '12px 20px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         }}>
@@ -82,7 +135,7 @@ const ProspectHomepage = ({ token }) => {
             </button>
             <span style={{ fontSize: '16px', fontWeight: '600' }}>{viewingPrototype.title}</span>
           </div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>Powered by Taulia</div>
+          {!hideTaulia && <div style={{ fontSize: '12px', opacity: 0.7 }}>Powered by Taulia</div>}
         </div>
         <iframe
           src={`/api/viewer/${token}/homepage/serve/${viewingPrototype.id}/index.html`}
@@ -92,6 +145,62 @@ const ProspectHomepage = ({ token }) => {
       </div>
     );
   }
+
+  // Identity gate modal
+  const renderIdentityModal = () => {
+    if (!showIdentityModal) return null;
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 1000, padding: '20px',
+      }}>
+        <div style={{
+          background: 'white', borderRadius: '12px', padding: '32px',
+          maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{
+              width: '50px', height: '50px', borderRadius: '50%', background: '#f0f9ff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px', fontSize: '24px',
+            }}>&#128075;</div>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1e293b', marginBottom: '6px' }}>Welcome!</h2>
+            <p style={{ color: '#64748b', fontSize: '14px' }}>
+              Tell us a bit about yourself (optional)
+            </p>
+          </div>
+          <form onSubmit={handleIdentitySubmit}>
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '4px', color: '#475569' }}>Name</label>
+              <input type="text" value={identityForm.name} onChange={e => setIdentityForm({ ...identityForm, name: e.target.value })} placeholder="Your name"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '4px', color: '#475569' }}>Email</label>
+              <input type="email" value={identityForm.email} onChange={e => setIdentityForm({ ...identityForm, email: e.target.value })} placeholder="your@email.com"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '4px', color: '#475569' }}>Company</label>
+              <input type="text" value={identityForm.company} onChange={e => setIdentityForm({ ...identityForm, company: e.target.value })} placeholder="Your company"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button type="submit" style={{
+                flex: 1, padding: '10px', background: headerBg, color: 'white', border: 'none',
+                borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500',
+              }}>Continue</button>
+              <button type="button" onClick={handleSkipIdentity} style={{
+                padding: '10px 16px', background: 'white', color: '#64748b', border: '1px solid #d1d5db',
+                borderRadius: '6px', cursor: 'pointer', fontSize: '14px',
+              }}>Skip</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
 
   // Access request modal overlay
   const renderAccessModal = () => {
@@ -187,11 +296,12 @@ const ProspectHomepage = ({ token }) => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+      {renderIdentityModal()}
       {renderAccessModal()}
 
       {/* Header */}
       <div style={{
-        background: '#1e293b', color: 'white', padding: '20px 30px',
+        background: headerBg, color: 'white', padding: '20px 30px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
       }}>
@@ -203,13 +313,13 @@ const ProspectHomepage = ({ token }) => {
             fontWeight: '700', fontSize: '18px',
           }}>T</div>
           <div>
-            <div style={{ fontSize: '18px', fontWeight: '600' }}>Taulia Prototypes</div>
+            <div style={{ fontSize: '18px', fontWeight: '600' }}>{headerText}</div>
             {linkInfo?.label && (
               <div style={{ fontSize: '12px', opacity: 0.7 }}>{linkInfo.label}</div>
             )}
           </div>
         </div>
-        <div style={{ fontSize: '12px', opacity: 0.7 }}>Powered by Taulia</div>
+        {!hideTaulia && <div style={{ fontSize: '12px', opacity: 0.7 }}>Powered by Taulia</div>}
       </div>
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '30px' }}>
@@ -241,7 +351,7 @@ const ProspectHomepage = ({ token }) => {
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 >
                   <div style={{
-                    height: '130px', background: 'linear-gradient(135deg, #0070c0 0%, #1e293b 100%)',
+                    height: '130px', background: `linear-gradient(135deg, ${headerBg} 0%, #1e293b 100%)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <span style={{ fontSize: '40px', opacity: 0.3, color: 'white' }}>&#9881;</span>
@@ -299,9 +409,8 @@ const ProspectHomepage = ({ token }) => {
                     onMouseEnter={e => { if (isApproved) { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
                     onMouseLeave={e => { if (isApproved) { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
                   >
-                    {/* Card header with blur + lock overlay */}
                     <div style={{
-                      height: '130px', background: 'linear-gradient(135deg, #0070c0 0%, #1e293b 100%)',
+                      height: '130px', background: `linear-gradient(135deg, ${headerBg} 0%, #1e293b 100%)`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       filter: isApproved ? 'none' : 'blur(4px)', position: 'relative',
                     }}>
@@ -340,7 +449,6 @@ const ProspectHomepage = ({ token }) => {
                         {proto.description || 'No description available.'}
                       </p>
 
-                      {/* Access status / actions */}
                       {isApproved && (
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -378,10 +486,10 @@ const ProspectHomepage = ({ token }) => {
 
                       {!isApproved && !isPending && !isDenied && !justRequested && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setRequestingAccess(proto.id); setAccessForm({ name: '', email: '', company: '', reason: '' }); }}
+                          onClick={(e) => { e.stopPropagation(); setRequestingAccess(proto.id); setAccessForm({ name: prospectIdentity?.name || '', email: prospectIdentity?.email || '', company: prospectIdentity?.company || '', reason: '' }); }}
                           style={{
                             width: '100%', padding: '10px',
-                            background: 'linear-gradient(135deg, #0070c0, #1e293b)',
+                            background: `linear-gradient(135deg, ${headerBg}, #1e293b)`,
                             color: 'white', border: 'none', borderRadius: '8px',
                             cursor: 'pointer', fontSize: '13px', fontWeight: '600',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -411,7 +519,7 @@ const ProspectHomepage = ({ token }) => {
         textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px',
         borderTop: '1px solid #e2e8f0', marginTop: '40px',
       }}>
-        Powered by Taulia
+        {footerText}
       </div>
     </div>
   );

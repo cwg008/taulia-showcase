@@ -12,6 +12,7 @@ import PublicViewer from './components/PublicViewer.jsx';
 import InviteAcceptPage from './components/InviteAcceptPage.jsx';
 import ProspectPortal from './components/ProspectPortal.jsx';
 import DocumentationView from './components/DocumentationView.jsx';
+import Settings from './components/Settings.jsx';
 import ViewerDashboard from './components/ViewerDashboard.jsx';
 
 export default function App() {
@@ -84,6 +85,8 @@ export default function App() {
         return <AuditLog />;
       case 'docs':
         return <DocumentationView />;
+      case 'settings':
+        return <Settings />;
       default:
         return <Dashboard />;
     }
@@ -104,9 +107,10 @@ export default function App() {
           <div className={`nav-item ${currentView === 'users' ? 'active' : ''}`} onClick={() => { setCurrentView('users'); setSelectedPrototypeId(null); }}>Users</div>
           <div className={`nav-item ${currentView === 'audit' ? 'active' : ''}`} onClick={() => { setCurrentView('audit'); setSelectedPrototypeId(null); }}>Audit Log</div>
           <div className={`nav-item ${currentView === 'docs' ? 'active' : ''}`} onClick={() => { setCurrentView('docs'); setSelectedPrototypeId(null); }}>Documentation</div>
+          <div className={`nav-item ${currentView === 'settings' ? 'active' : ''}`} onClick={() => { setCurrentView('settings'); setSelectedPrototypeId(null); }}>Settings</div>
         </nav>
         <div className="sidebar-footer">
-          Version 1.3.4
+          Version 1.4.0
         </div>
       </div>
 
@@ -120,6 +124,7 @@ export default function App() {
             {currentView === 'users' && 'User Management'}
             {currentView === 'audit' && 'Audit Log'}
             {currentView === 'docs' && 'Documentation'}
+            {currentView === 'settings' && 'Settings'}
           </div>
           <div className="header-user">
             <span className="user-email">{user?.email}</span>

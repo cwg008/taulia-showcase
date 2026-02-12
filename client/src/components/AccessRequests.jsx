@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import SearchFilterBar from './SearchFilterBar';
 
 const AccessRequests = () => {
   const [requests, setRequests] = useState([]);
@@ -7,15 +8,19 @@ const AccessRequests = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [filter, setFilter] = useState('pending');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetchRequests();
-  }, [filter]);
+  }, [filter, search]);
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const url = filter ? `/api/admin/access-requests?status=${filter}` : '/api/admin/access-requests';
+      const queryParams = new URLSearchParams();
+      if (filter) queryParams.append('status', filter);
+      if (search) queryParams.append('search', search);
+      const url = `/api/admin/access-requests${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       const data = await apiClient.get(url);
       setRequests(data.requests || []);
     } catch (err) {
@@ -52,7 +57,7 @@ const AccessRequests = () => {
       {error && <div className="error-message">{error}</div>}
       {successMsg && <div className="success-message">{successMsg}</div>}
 
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {['pending', 'approved', 'denied', ''].map((f) => (
           <button
             key={f}
@@ -63,6 +68,13 @@ const AccessRequests = () => {
           </button>
         ))}
       </div>
+
+      <SearchFilterBar
+        searchPlaceholder="Search by name or email..."
+        filters={[]}
+        onSearchChange={setSearch}
+        onFilterChange={() => {}}
+      />
 
       {requests.length > 0 ? (
         <div className="card">

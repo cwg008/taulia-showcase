@@ -7,15 +7,28 @@ const AuditLog = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const pageSize = 20;
 
   useEffect(() => {
     fetchLogs();
-  }, [page]);
+  }, [page, search]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const fetchLogs = async () => {
     try {
-      const data = await apiClient.get(`/api/admin/audit-logs?page=${page}&limit=${pageSize}`);
+      let url = `/api/admin/audit-logs?page=${page}&limit=${pageSize}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const data = await apiClient.get(url);
       setLogs(data.logs || []);
       setTotalPages(data.totalPages || 1);
     } catch (err) {
@@ -23,6 +36,13 @@ const AuditLog = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) return 'N/A';
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleString();
   };
 
   if (loading) {
@@ -38,6 +58,16 @@ const AuditLog = () => {
     <div>
       {error && <div className="error-message">{error}</div>}
 
+      <div style={{ marginBottom: '16px' }}>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by user email, action, or IP..."
+          style={{ width: '100%', maxWidth: '400px', padding: '10px 14px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
+        />
+      </div>
+
       {logs.length > 0 ? (
         <div className="card">
           <table>
@@ -51,41 +81,43 @@ const AuditLog = () => {
               </tr>
             </thead>
             <tbody>
-              {logs.map((log, idx) => (
-                <tr key={idx}>
-                  <td>{new Date(log.timestamp).toLocaleString()}</td>
-                  <td>{log.userEmail}</td>
+              {logs.map((log) => (
+                <tr key={log.id}>
+                  <td>{formatDate(log.created_at)}</td>
+                  <td>{log.user_email || 'System'}</td>
                   <td>
                     <span className="badge badge-primary">{log.action}</span>
                   </td>
-                  <td>{log.resourceType}: {log.resourceId}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.ipAddress}</td>
+                  <td>{log.resource_type}: {log.resource_id}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.ip_address}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div className="pagination">
+          <div className="pagination" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', gap: '8px' }}>
             <button
               onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page === 1}
+              className="btn-secondary btn-small"
             >
-              ← Previous
+              &larr; Previous
             </button>
-            <span style={{ padding: '0 10px' }}>
+            <span style={{ padding: '0 10px', fontSize: '14px', color: '#64748b' }}>
               Page {page} of {totalPages}
             </span>
             <button
               onClick={() => setPage(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
+              className="btn-secondary btn-small"
             >
-              Next →
+              Next &rarr;
             </button>
           </div>
         </div>
       ) : (
         <div className="card">
-          <div className="card-body">No audit logs available.</div>
+          <div className="card-body">{search ? 'No audit logs match your search.' : 'No audit logs available.'}</div>
         </div>
       )}
     </div>

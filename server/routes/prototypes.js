@@ -27,10 +27,21 @@ const upload = multer({
 // GET / - List all prototypes
 router.get('/', authenticate, async (req, res) => {
   try {
-    const prototypes = await db('prototypes')
-      .select('id', 'title', 'description', 'slug', 'status', 'type', 'version', 'is_top_secret', 'created_by', 'created_at', 'updated_at')
-      .orderBy('created_at', 'desc');
+    const { search, status, topSecret } = req.query;
 
+    let query = db('prototypes')
+      .select('id', 'title', 'description', 'slug', 'status', 'type', 'version', 'is_top_secret', 'created_by', 'created_at', 'updated_at');
+
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.where(function() {
+        this.where('title', 'like', searchTerm).orWhere('description', 'like', searchTerm);
+      });
+    }
+    if (status) query = query.where('status', status);
+    if (topSecret !== undefined) query = query.where('is_top_secret', topSecret === 'true');
+
+    const prototypes = await query.orderBy('created_at', 'desc');
     res.json({ prototypes });
   } catch (error) {
     console.error('Get prototypes error:', error.message);
@@ -217,6 +228,140 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     res.json({ message: 'Prototype deleted' });
   } catch (error) {
     console.error('Delete prototype error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /:id/serve/* - Serve prototype files for admin preview
+router.get('/:id/serve/*', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = req.params[0] || 'index.html';
+
+    const prototype = await db('prototypes').where('id', id).first();
+    if (!prototype) {
+      return res.status(404).json({ error: 'Prototype not found' });
+    }
+
+    const uploadsDir = path.resolve(__dirname, '..', 'uploads', 'prototypes', id);
+
+    // Reject obvious traversal attempts
+    if (filePath.includes('..') || filePath.includes('\0')) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const fullPath = path.resolve(uploadsDir, filePath);
+
+    // Security: strict directory containment
+    const normalizedUploads = uploadsDir + path.sep;
+    if (!fullPath.startsWith(normalizedUploads) && fullPath !== uploadsDir) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const relPath = path.relative(uploadsDir, fullPath);
+    if (relPath.startsWith('..') || path.isAbsolute(relPath)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
+    res.sendFile(fullPath);
+  } catch (error) {
+    console.error('Serve prototype file error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /:id/annotations - List annotations for a prototype
+router.get('/:id/annotations', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const annotations = await db('prototype_annotations')
+      .where('prototype_id', id)
+      .orderBy('step_order', 'asc');
+    res.json({ annotations });
+  } catch (error) {
+    console.error('Get annotations error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /:id/annotations - Create annotation
+router.post('/:id/annotations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, xPercent, yPercent, stepOrder, pagePath } = req.body;
+
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+
+    const prototype = await db('prototypes').where('id', id).first();
+    if (!prototype) return res.status(404).json({ error: 'Prototype not found' });
+
+    const annotationId = require('crypto').randomBytes(8).toString('hex');
+    await db('prototype_annotations').insert({
+      id: annotationId,
+      prototype_id: id,
+      title,
+      description: description || '',
+      x_percent: xPercent || 50,
+      y_percent: yPercent || 50,
+      step_order: stepOrder || 1,
+      page_path: pagePath || 'index.html',
+      created_by: req.user.id,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await createAuditLog(req.user.id, 'annotation:create', 'annotation', annotationId, { prototypeId: id, title }, req.ip);
+
+    res.status(201).json({ annotation: { id: annotationId, title, description, xPercent, yPercent, stepOrder, pagePath } });
+  } catch (error) {
+    console.error('Create annotation error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /:id/annotations/:annotationId - Update annotation
+router.patch('/:id/annotations/:annotationId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id, annotationId } = req.params;
+    const { title, description, xPercent, yPercent, stepOrder, pagePath } = req.body;
+
+    const annotation = await db('prototype_annotations').where('id', annotationId).where('prototype_id', id).first();
+    if (!annotation) return res.status(404).json({ error: 'Annotation not found' });
+
+    const updates = { updated_at: new Date() };
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (xPercent !== undefined) updates.x_percent = xPercent;
+    if (yPercent !== undefined) updates.y_percent = yPercent;
+    if (stepOrder !== undefined) updates.step_order = stepOrder;
+    if (pagePath !== undefined) updates.page_path = pagePath;
+
+    await db('prototype_annotations').where('id', annotationId).update(updates);
+    res.json({ message: 'Annotation updated' });
+  } catch (error) {
+    console.error('Update annotation error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /:id/annotations/:annotationId - Delete annotation
+router.delete('/:id/annotations/:annotationId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id, annotationId } = req.params;
+    const annotation = await db('prototype_annotations').where('id', annotationId).where('prototype_id', id).first();
+    if (!annotation) return res.status(404).json({ error: 'Annotation not found' });
+
+    await db('prototype_annotations').where('id', annotationId).del();
+    await createAuditLog(req.user.id, 'annotation:delete', 'annotation', annotationId, { prototypeId: id }, req.ip);
+    res.json({ message: 'Annotation deleted' });
+  } catch (error) {
+    console.error('Delete annotation error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

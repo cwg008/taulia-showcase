@@ -19,6 +19,13 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [togglingSecret, setTogglingSecret] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Annotations state
+  const [annotations, setAnnotations] = useState([]);
+  const [showAnnotationForm, setShowAnnotationForm] = useState(false);
+  const [annotationForm, setAnnotationForm] = useState({ title: '', description: '', xPercent: 50, yPercent: 50, stepOrder: 1 });
+  const [editingAnnotation, setEditingAnnotation] = useState(null);
 
   const fetchDetails = async () => {
     try {
@@ -43,7 +50,14 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
     } catch (err) { /* non-critical */ }
   };
 
-  useEffect(() => { fetchDetails(); fetchAccessRequests(); fetchFeedback(); }, [prototypeId]);
+  const fetchAnnotations = async () => {
+    try {
+      const data = await apiClient.get(`/api/prototypes/${prototypeId}/annotations`);
+      setAnnotations(data.annotations || []);
+    } catch (err) { /* non-critical */ }
+  };
+
+  useEffect(() => { fetchDetails(); fetchAccessRequests(); fetchFeedback(); fetchAnnotations(); }, [prototypeId]);
 
   const handleToggleTopSecret = async () => {
     if (!prototype) return;
@@ -63,6 +77,67 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
       setSuccessMsg(`Access request ${decision}`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) { setError('Failed to review access request'); }
+  };
+
+  const handleCreateAnnotation = async (e) => {
+    e.preventDefault();
+    if (!annotationForm.title) return;
+    try {
+      await apiClient.post(`/api/prototypes/${prototypeId}/annotations`, {
+        title: annotationForm.title,
+        description: annotationForm.description,
+        xPercent: parseInt(annotationForm.xPercent),
+        yPercent: parseInt(annotationForm.yPercent),
+        stepOrder: parseInt(annotationForm.stepOrder),
+      });
+      setAnnotationForm({ title: '', description: '', xPercent: 50, yPercent: 50, stepOrder: annotations.length + 2 });
+      setShowAnnotationForm(false);
+      setSuccessMsg('Annotation created');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      fetchAnnotations();
+    } catch (err) { setError('Failed to create annotation'); }
+  };
+
+  const handleUpdateAnnotation = async (e) => {
+    e.preventDefault();
+    if (!editingAnnotation) return;
+    try {
+      await apiClient.patch(`/api/prototypes/${prototypeId}/annotations/${editingAnnotation.id}`, {
+        title: annotationForm.title,
+        description: annotationForm.description,
+        xPercent: parseInt(annotationForm.xPercent),
+        yPercent: parseInt(annotationForm.yPercent),
+        stepOrder: parseInt(annotationForm.stepOrder),
+      });
+      setEditingAnnotation(null);
+      setShowAnnotationForm(false);
+      setAnnotationForm({ title: '', description: '', xPercent: 50, yPercent: 50, stepOrder: annotations.length + 1 });
+      setSuccessMsg('Annotation updated');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      fetchAnnotations();
+    } catch (err) { setError('Failed to update annotation'); }
+  };
+
+  const handleDeleteAnnotation = async (annotationId) => {
+    if (!window.confirm('Delete this annotation?')) return;
+    try {
+      await apiClient.delete(`/api/prototypes/${prototypeId}/annotations/${annotationId}`);
+      fetchAnnotations();
+      setSuccessMsg('Annotation deleted');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) { setError('Failed to delete annotation'); }
+  };
+
+  const startEditAnnotation = (ann) => {
+    setEditingAnnotation(ann);
+    setAnnotationForm({
+      title: ann.title,
+      description: ann.description || '',
+      xPercent: ann.x_percent,
+      yPercent: ann.y_percent,
+      stepOrder: ann.step_order,
+    });
+    setShowAnnotationForm(true);
   };
 
   if (loading) return (<div className="loading"><div className="spinner"></div>Loading details...</div>);
@@ -89,6 +164,29 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
             <p><strong>Status:</strong> <span className="badge badge-primary">{prototype.status}</span></p>
             <p><strong>Created:</strong> {new Date(prototype.created_at || prototype.createdAt).toLocaleDateString()}</p>
           </div>
+
+          {/* Preview button */}
+          <div style={{ marginTop: '15px' }}>
+            <button className="btn-primary btn-small" onClick={() => setShowPreview(!showPreview)} style={{ marginRight: '10px' }}>
+              {showPreview ? 'Hide Preview' : 'Preview Prototype'}
+            </button>
+          </div>
+
+          {/* Preview iframe */}
+          {showPreview && (
+            <div style={{ marginTop: '15px', border: '2px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ background: '#f1f5f9', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Live Preview</span>
+                <button className="btn-secondary btn-small" onClick={() => setShowPreview(false)} style={{ fontSize: '11px', padding: '3px 10px' }}>Close</button>
+              </div>
+              <iframe
+                src={`/api/prototypes/${prototypeId}/serve/index.html`}
+                style={{ width: '100%', height: '600px', border: 'none' }}
+                title="Prototype Preview"
+              />
+            </div>
+          )}
+
           <div style={{ marginTop: '20px', padding: '15px', background: prototype.is_top_secret ? '#fef2f2' : '#f0fdf4', borderRadius: '8px', border: `1px solid ${prototype.is_top_secret ? '#fecaca' : '#bbf7d0'}` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
@@ -101,6 +199,75 @@ const PrototypeDetail = ({ prototypeId, onBack }) => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Annotations Section */}
+      <div className="card">
+        <div className="card-header">
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span>Guided Tour Annotations ({annotations.length})</span>
+            <button className="btn-primary btn-small" onClick={() => { setEditingAnnotation(null); setAnnotationForm({ title: '', description: '', xPercent: 50, yPercent: 50, stepOrder: annotations.length + 1 }); setShowAnnotationForm(!showAnnotationForm); }}>
+              {showAnnotationForm && !editingAnnotation ? 'Cancel' : '+ Add Annotation'}
+            </button>
+          </span>
+        </div>
+
+        {showAnnotationForm && (
+          <div style={{ padding: '16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <form onSubmit={editingAnnotation ? handleUpdateAnnotation : handleCreateAnnotation}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px', color: '#475569' }}>Title *</label>
+                  <input type="text" value={annotationForm.title} onChange={e => setAnnotationForm({...annotationForm, title: e.target.value})} placeholder="e.g., Dashboard Overview" required style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px', color: '#475569' }}>Step Order</label>
+                  <input type="number" value={annotationForm.stepOrder} onChange={e => setAnnotationForm({...annotationForm, stepOrder: e.target.value})} min="1" style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px', color: '#475569' }}>Description</label>
+                <textarea value={annotationForm.description} onChange={e => setAnnotationForm({...annotationForm, description: e.target.value})} placeholder="Describe what this step shows..." rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px', color: '#475569' }}>X Position (0-100%)</label>
+                  <input type="number" value={annotationForm.xPercent} onChange={e => setAnnotationForm({...annotationForm, xPercent: e.target.value})} min="0" max="100" style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px', color: '#475569' }}>Y Position (0-100%)</label>
+                  <input type="number" value={annotationForm.yPercent} onChange={e => setAnnotationForm({...annotationForm, yPercent: e.target.value})} min="0" max="100" style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="submit" className="btn-primary btn-small">{editingAnnotation ? 'Update' : 'Create'} Annotation</button>
+                <button type="button" className="btn-secondary btn-small" onClick={() => { setShowAnnotationForm(false); setEditingAnnotation(null); }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {annotations.length > 0 ? (
+          <table>
+            <thead><tr><th>Step</th><th>Title</th><th>Description</th><th>Position</th><th>Actions</th></tr></thead>
+            <tbody>
+              {annotations.map(ann => (
+                <tr key={ann.id}>
+                  <td><span style={{ background: '#0070c0', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '13px' }}>{ann.step_order}</span></td>
+                  <td style={{ fontWeight: '600' }}>{ann.title}</td>
+                  <td style={{ maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#64748b' }}>{ann.description || '-'}</td>
+                  <td style={{ fontSize: '12px', fontFamily: 'monospace' }}>({ann.x_percent}%, {ann.y_percent}%)</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn-secondary btn-small" onClick={() => startEditAnnotation(ann)}>Edit</button>
+                      <button className="btn-secondary btn-small" style={{ color: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDeleteAnnotation(ann.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (<div className="card-body" style={{ color: '#94a3b8' }}>No annotations yet. Add annotations to create a guided tour for prospects.</div>)}
       </div>
 
       {/* Access Requests */}

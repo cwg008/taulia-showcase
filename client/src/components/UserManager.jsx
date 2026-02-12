@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import SearchFilterBar from './SearchFilterBar';
 
 const UserManager = () => {
   const [users, setUsers] = useState([]);
@@ -10,12 +11,18 @@ const UserManager = () => {
   const [inviteData, setInviteData] = useState({ email: '', name: '', role: 'viewer', prototypeIds: [] });
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
-  useEffect(() => { fetchUsers(); fetchPrototypes(); }, []);
+  useEffect(() => { fetchUsers(); fetchPrototypes(); }, [search, roleFilter]);
 
   const fetchUsers = async () => {
     try {
-      const data = await apiClient.get('/api/admin/users');
+      const queryParams = new URLSearchParams();
+      if (search) queryParams.append('search', search);
+      if (roleFilter) queryParams.append('role', roleFilter);
+      const url = `/api/admin/users${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const data = await apiClient.get(url);
       setUsers(data.users || []);
     } catch (err) { setError('Failed to load users'); } finally { setLoading(false); }
   };
@@ -46,6 +53,11 @@ const UserManager = () => {
     });
   };
 
+  const roleFilters = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'viewer', label: 'Viewer' },
+  ];
+
   if (loading) return (<div className="loading"><div className="spinner"></div>Loading users...</div>);
 
   return (
@@ -56,6 +68,23 @@ const UserManager = () => {
           {showInviteForm ? 'Cancel' : '+ Invite User'}
         </button>
       </div>
+
+      <SearchFilterBar
+        searchPlaceholder="Search users..."
+        filters={[
+          {
+            key: 'role',
+            label: 'Filter by Role',
+            options: roleFilters,
+          },
+        ]}
+        onSearchChange={setSearch}
+        onFilterChange={(key, value) => {
+          if (key === 'role') {
+            setRoleFilter(value);
+          }
+        }}
+      />
 
       {inviteResult && (
         <div className="card" style={{ marginBottom: '20px' }}>

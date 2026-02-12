@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
+const bcrypt = require('bcryptjs');
+const { sendSlackNotification } = require('../services/slackService');
 
 const router = express.Router();
 
@@ -69,21 +71,38 @@ function servePrototypeFile(prototype, filePath, res) {
 router.get('/:token', async (req, res) => {
   try {
     const { token } = req.params;
+    const { authenticated } = req.query;
     const result = await validateMagicLink(token);
     if (result.error) return res.status(result.status).json({ error: result.error });
     const { link } = result;
 
+    // Item 6: Check password protection
+    if (link.password_hash && authenticated !== 'true') {
+      return res.json({
+        requiresPassword: true,
+        linkLabel: link.label,
+      });
+    }
+
     // Homepage link: prototype_id is null
     if (!link.prototype_id) {
       // Record view for homepage link
-      await db('link_views').insert({
-        id: require('crypto').randomBytes(8).toString('hex'),
+      const viewId = require('crypto').randomBytes(8).toString('hex');
+      const viewData = {
+        id: viewId,
         magic_link_id: link.id,
         prototype_id: 'homepage',
         ip_address: req.ip,
         user_agent: req.get('user-agent'),
         viewed_at: new Date(),
-      });
+      };
+
+      // Item 7: Include prospect identity if provided
+      if (req.query.prospectName) viewData.prospect_name = req.query.prospectName;
+      if (req.query.prospectEmail) viewData.prospect_email = req.query.prospectEmail;
+      if (req.query.prospectCompany) viewData.prospect_company = req.query.prospectCompany;
+
+      await db('link_views').insert(viewData);
       await db('magic_links').where('id', link.id).increment('view_count', 1);
 
       return res.json({
@@ -122,16 +141,43 @@ router.get('/:token', async (req, res) => {
 
     // Only record view if access is granted
     if (accessGranted) {
-      await db('link_views').insert({
-        id: require('crypto').randomBytes(8).toString('hex'),
+      const viewId = require('crypto').randomBytes(8).toString('hex');
+      const viewData = {
+        id: viewId,
         magic_link_id: link.id,
         prototype_id: prototype.id,
         ip_address: req.ip,
         user_agent: req.get('user-agent'),
         viewed_at: new Date(),
-      });
+      };
 
+      // Item 7: Include prospect identity if provided
+      if (req.query.prospectName) viewData.prospect_name = req.query.prospectName;
+      if (req.query.prospectEmail) viewData.prospect_email = req.query.prospectEmail;
+      if (req.query.prospectCompany) viewData.prospect_company = req.query.prospectCompany;
+
+      await db('link_views').insert(viewData);
       await db('magic_links').where('id', link.id).increment('view_count', 1);
+
+      // Item 10: Send Slack notification (non-blocking)
+      sendSlackNotification('view', {
+        prototypeTitle: prototype.title,
+        linkLabel: link.label,
+      }).catch(err => console.error('Slack notification error:', err));
+    }
+
+    // Item 9: Fetch annotations
+    const annotations = await db('prototype_annotations')
+      .where('prototype_id', prototype.id);
+
+    // Item 3: Parse branding config
+    let branding = null;
+    if (link.branding_config) {
+      try {
+        branding = JSON.parse(link.branding_config);
+      } catch (err) {
+        console.error('Error parsing branding config:', err.message);
+      }
     }
 
     res.json({
@@ -147,9 +193,128 @@ router.get('/:token', async (req, res) => {
         status: accessStatus,
         granted: accessGranted,
       },
+      annotations: annotations,
+      branding: branding,
     });
   } catch (error) {
     console.error('Get viewer error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Item 6: POST /:token/authenticate - Authenticate with password
+router.post('/:token/authenticate', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    const result = await validateMagicLink(token);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    const { link } = result;
+
+    // Check if link requires password
+    if (!link.password_hash) {
+      return res.status(400).json({ error: 'This link does not have password protection' });
+    }
+
+    // Validate password
+    const match = await bcrypt.compare(password, link.password_hash);
+    if (!match) {
+      return res.status(403).json({ error: 'Incorrect password' });
+    }
+
+    // If it's a homepage link
+    if (!link.prototype_id) {
+      return res.json({
+        authenticated: true,
+        type: 'homepage',
+        link: {
+          id: link.id,
+          label: link.label,
+        },
+      });
+    }
+
+    // If it's a single-prototype link
+    const prototype = await db('prototypes')
+      .where('id', link.prototype_id)
+      .first();
+
+    if (!prototype || prototype.status !== 'published') {
+      return res.status(404).json({ error: 'Prototype not found or not published' });
+    }
+
+    // Check top-secret access
+    const isTopSecret = !!prototype.is_top_secret;
+    let accessGranted = true;
+    let accessStatus = 'approved';
+
+    if (isTopSecret) {
+      const accessRequest = await db('prototype_access_requests')
+        .where('magic_link_id', link.id)
+        .where('prototype_id', prototype.id)
+        .orderBy('created_at', 'desc')
+        .first();
+
+      accessStatus = accessRequest ? accessRequest.status : null;
+      accessGranted = accessStatus === 'approved';
+    }
+
+    // Item 9: Fetch annotations
+    const annotations = await db('prototype_annotations')
+      .where('prototype_id', prototype.id);
+
+    // Item 3: Parse branding config
+    let branding = null;
+    if (link.branding_config) {
+      try {
+        branding = JSON.parse(link.branding_config);
+      } catch (err) {
+        console.error('Error parsing branding config:', err.message);
+      }
+    }
+
+    res.json({
+      authenticated: true,
+      prototype: {
+        id: prototype.id,
+        title: prototype.title,
+        description: prototype.description,
+        type: prototype.type,
+        version: prototype.version,
+        is_top_secret: isTopSecret,
+      },
+      access: {
+        status: accessStatus,
+        granted: accessGranted,
+      },
+      annotations: annotations,
+      branding: branding,
+    });
+  } catch (error) {
+    console.error('Authenticate error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Item 7: POST /:token/identify - Record prospect identity
+router.post('/:token/identify', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { name, email, company } = req.body;
+
+    const result = await validateMagicLink(token);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+
+    res.json({
+      identified: true,
+    });
+  } catch (error) {
+    console.error('Identify error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -292,6 +457,13 @@ router.post('/:token/homepage/request-access', async (req, res) => {
       status: 'pending',
       created_at: new Date(),
     });
+
+    // Item 10: Send Slack notification (non-blocking)
+    sendSlackNotification('access_request', {
+      prototypeTitle: prototype.title,
+      name: stripHtml(name),
+      email: email,
+    }).catch(err => console.error('Slack notification error:', err));
 
     res.status(201).json({
       request: {

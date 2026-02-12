@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import SearchFilterBar from './SearchFilterBar';
 
 const PrototypeList = ({ onSelectPrototype }) => {
   const [prototypes, setPrototypes] = useState([]);
@@ -14,14 +15,21 @@ const PrototypeList = ({ onSelectPrototype }) => {
   });
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
     fetchPrototypes();
-  }, []);
+  }, [search, statusFilter]);
 
   const fetchPrototypes = async () => {
     try {
-      const data = await apiClient.get('/api/prototypes');
+      setLoading(true);
+      const queryParams = new URLSearchParams();
+      if (search) queryParams.append('search', search);
+      if (statusFilter) queryParams.append('status', statusFilter);
+      const url = `/api/prototypes${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const data = await apiClient.get(url);
       setPrototypes(data.prototypes || []);
     } catch (err) {
       setError('Failed to load prototypes');
@@ -82,6 +90,12 @@ const PrototypeList = ({ onSelectPrototype }) => {
     }
   };
 
+  const statusFilters = [
+    { value: 'draft', label: 'Draft' },
+    { value: 'published', label: 'Published' },
+    { value: 'archived', label: 'Archived' },
+  ];
+
   if (loading) {
     return (
       <div className="loading">
@@ -100,6 +114,23 @@ const PrototypeList = ({ onSelectPrototype }) => {
           {showUploadForm ? 'Cancel' : '+ Upload Prototype'}
         </button>
       </div>
+
+      <SearchFilterBar
+        searchPlaceholder="Search prototypes..."
+        filters={[
+          {
+            key: 'status',
+            label: 'Filter by Status',
+            options: statusFilters,
+          },
+        ]}
+        onSearchChange={setSearch}
+        onFilterChange={(key, value) => {
+          if (key === 'status') {
+            setStatusFilter(value);
+          }
+        }}
+      />
 
       {showUploadForm && (
         <div className="card">

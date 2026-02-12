@@ -4,13 +4,32 @@ const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { createAuditLog } = require('../middleware/auditLog');
+const { sendAccessApproved, sendAccessDenied } = require('../services/emailService');
+const { sendSlackNotification } = require('../services/slackService');
 
 const router = express.Router();
 
 // GET /users
 router.get('/users', authenticate, requireAdmin, async (req, res) => {
   try {
-    const users = await db('users').select('id', 'email', 'name', 'role', 'is_active', 'created_at', 'updated_at');
+    const { search, role } = req.query;
+    let query = db('users');
+
+    // Apply search filter
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.where(function() {
+        this.where('email', 'like', searchTerm)
+          .orWhere('name', 'like', searchTerm);
+      });
+    }
+
+    // Apply role filter
+    if (role) {
+      query = query.where('role', role);
+    }
+
+    const users = await query.select('id', 'email', 'name', 'role', 'is_active', 'created_at', 'updated_at');
     // Transform snake_case to camelCase and fix SQLite booleans
     const transformed = users.map(user => ({
       id: user.id,
@@ -170,8 +189,44 @@ router.delete('/users/:id', authenticate, requireAdmin, async (req, res) => {
 // GET /audit-logs
 router.get('/audit-logs', authenticate, requireAdmin, async (req, res) => {
   try {
-    const logs = await db('audit_logs')
-      .leftJoin('users', 'audit_logs.user_id', 'users.id')
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { search, action: actionFilter, dateFrom, dateTo } = req.query;
+    const offset = (page - 1) * limit;
+
+    let baseQuery = db('audit_logs')
+      .leftJoin('users', 'audit_logs.user_id', 'users.id');
+
+    // Apply search filter
+    if (search) {
+      const searchTerm = `%${search}%`;
+      baseQuery = baseQuery.where(function() {
+        this.where('users.email', 'like', searchTerm)
+          .orWhere('audit_logs.action', 'like', searchTerm)
+          .orWhere('audit_logs.ip_address', 'like', searchTerm);
+      });
+    }
+
+    // Apply action filter
+    if (actionFilter) {
+      baseQuery = baseQuery.where('audit_logs.action', actionFilter);
+    }
+
+    // Apply date range filters
+    if (dateFrom) {
+      baseQuery = baseQuery.where('audit_logs.created_at', '>=', dateFrom);
+    }
+    if (dateTo) {
+      baseQuery = baseQuery.where('audit_logs.created_at', '<=', dateTo);
+    }
+
+    // Get total count
+    const countResult = await baseQuery.clone().count('audit_logs.id as count').first();
+    const totalCount = countResult.count;
+    const totalPages = Math.ceil(totalCount / limit) || 1;
+
+    // Get paginated logs
+    const logs = await baseQuery.clone()
       .select(
         'audit_logs.id',
         'audit_logs.user_id',
@@ -184,9 +239,10 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req, res) => {
         'audit_logs.created_at'
       )
       .orderBy('audit_logs.created_at', 'desc')
-      .limit(1000);
+      .limit(limit)
+      .offset(offset);
 
-    res.json({ logs });
+    res.json({ logs, totalPages, currentPage: page, totalCount });
   } catch (error) {
     console.error('Get audit logs error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -231,7 +287,7 @@ router.get('/analytics', authenticate, requireAdmin, async (req, res) => {
 // GET /access-requests - List all access requests
 router.get('/access-requests', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, search } = req.query;
 
     let query = db('prototype_access_requests')
       .leftJoin('prototypes', 'prototype_access_requests.prototype_id', 'prototypes.id')
@@ -261,6 +317,15 @@ router.get('/access-requests', authenticate, requireAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Invalid status filter' });
       }
       query = query.where('prototype_access_requests.status', status);
+    }
+
+    // Apply search filter
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.where(function() {
+        this.where('prototype_access_requests.requester_name', 'like', searchTerm)
+          .orWhere('prototype_access_requests.requester_email', 'like', searchTerm);
+      });
     }
 
     const requests = await query.limit(500);
@@ -312,6 +377,25 @@ router.patch('/access-requests/:id', authenticate, requireAdmin, [
       },
       req.ip
     );
+
+    // Send email and Slack notifications (non-blocking)
+    (async () => {
+      try {
+        const magicLink = await db('magic_links').where('id', request.magic_link_id).first();
+        const prototype = await db('prototypes').where('id', request.prototype_id).first();
+        const viewerUrl = magicLink ? `${process.env.CLIENT_URL || ''}/viewer/${magicLink.token}` : '';
+
+        if (status === 'approved') {
+          sendAccessApproved(request.requester_email, request.requester_name, prototype?.title || 'Prototype', viewerUrl);
+          sendSlackNotification('access_approved', { name: request.requester_name, prototypeTitle: prototype?.title || 'Prototype' });
+        } else {
+          sendAccessDenied(request.requester_email, request.requester_name, prototype?.title || 'Prototype');
+          sendSlackNotification('access_denied', { name: request.requester_name, prototypeTitle: prototype?.title || 'Prototype' });
+        }
+      } catch (notificationError) {
+        console.error('Notification error:', notificationError.message);
+      }
+    })();
 
     res.json({ message: `Access request ${status}` });
   } catch (error) {
@@ -380,6 +464,339 @@ router.get('/prototypes/:id/feedback', authenticate, requireAdmin, async (req, r
     });
   } catch (error) {
     console.error('Get prototype feedback error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /analytics/detailed - Detailed analytics dashboard
+router.get('/analytics/detailed', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const days = Math.max(1, parseInt(req.query.days) || 30);
+    const { prototypeId } = req.query;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // Views by day
+    let viewsByDayQuery = db('link_views')
+      .where('viewed_at', '>=', cutoff)
+      .select(db.raw('DATE(viewed_at) as date'))
+      .count('* as count')
+      .groupBy('date')
+      .orderBy('date');
+
+    if (prototypeId) {
+      viewsByDayQuery = viewsByDayQuery.where('prototype_id', prototypeId);
+    }
+
+    const viewsByDay = await viewsByDayQuery;
+
+    // Views by prototype
+    let viewsByPrototypeQuery = db('link_views')
+      .leftJoin('prototypes', 'link_views.prototype_id', 'prototypes.id')
+      .where('link_views.viewed_at', '>=', cutoff)
+      .select('link_views.prototype_id', 'prototypes.title')
+      .count('link_views.* as viewCount')
+      .groupBy('link_views.prototype_id', 'prototypes.title')
+      .orderBy('viewCount', 'desc');
+
+    const viewsByPrototype = await viewsByPrototypeQuery;
+
+    // Unique viewers
+    let uniqueViewersQuery = db('link_views')
+      .where('viewed_at', '>=', cutoff)
+      .distinct('ip_address');
+
+    if (prototypeId) {
+      uniqueViewersQuery = uniqueViewersQuery.where('prototype_id', prototypeId);
+    }
+
+    const uniqueViewersData = await uniqueViewersQuery;
+    const uniqueViewers = uniqueViewersData.length;
+
+    // Feedback by category
+    let feedbackByCategoryQuery = db('prospect_feedback')
+      .where('created_at', '>=', cutoff)
+      .select('category')
+      .count('* as count')
+      .groupBy('category')
+      .orderBy('count', 'desc');
+
+    if (prototypeId) {
+      feedbackByCategoryQuery = feedbackByCategoryQuery.where('prototype_id', prototypeId);
+    }
+
+    const feedbackByCategory = await feedbackByCategoryQuery;
+
+    // Rating distribution
+    let ratingDistQuery = db('prospect_feedback')
+      .where('created_at', '>=', cutoff)
+      .whereNotNull('rating')
+      .select('rating')
+      .count('* as count')
+      .groupBy('rating')
+      .orderBy('rating');
+
+    if (prototypeId) {
+      ratingDistQuery = ratingDistQuery.where('prototype_id', prototypeId);
+    }
+
+    const ratingData = await ratingDistQuery;
+    const ratingDistribution = {};
+    for (let i = 1; i <= 5; i++) {
+      ratingDistribution[i] = 0;
+    }
+    ratingData.forEach(row => {
+      ratingDistribution[row.rating] = row.count;
+    });
+
+    // Recent views (last 20)
+    let recentViewsQuery = db('link_views')
+      .leftJoin('magic_links', 'link_views.magic_link_id', 'magic_links.id')
+      .leftJoin('prototypes', 'link_views.prototype_id', 'prototypes.id')
+      .where('link_views.viewed_at', '>=', cutoff)
+      .select(
+        'link_views.id',
+        'link_views.viewed_at',
+        'link_views.ip_address',
+        'magic_links.label',
+        'prototypes.title'
+      )
+      .orderBy('link_views.viewed_at', 'desc')
+      .limit(20);
+
+    if (prototypeId) {
+      recentViewsQuery = recentViewsQuery.where('link_views.prototype_id', prototypeId);
+    }
+
+    const recentViews = await recentViewsQuery;
+
+    // Conversion funnel
+    let totalViewsQuery = db('link_views').where('viewed_at', '>=', cutoff);
+    let feedbackCountQuery = db('prospect_feedback').where('created_at', '>=', cutoff);
+    let accessRequestCountQuery = db('prototype_access_requests').where('created_at', '>=', cutoff);
+
+    if (prototypeId) {
+      totalViewsQuery = totalViewsQuery.where('prototype_id', prototypeId);
+      feedbackCountQuery = feedbackCountQuery.where('prototype_id', prototypeId);
+      accessRequestCountQuery = accessRequestCountQuery.where('prototype_id', prototypeId);
+    }
+
+    const totalViewsResult = await totalViewsQuery.count('* as count').first();
+    const feedbackCountResult = await feedbackCountQuery.count('* as count').first();
+    const accessRequestCountResult = await accessRequestCountQuery.count('* as count').first();
+
+    const conversionFunnel = {
+      totalViews: totalViewsResult.count,
+      uniqueViewers: uniqueViewers,
+      feedbackCount: feedbackCountResult.count,
+      accessRequestCount: accessRequestCountResult.count,
+    };
+
+    res.json({
+      viewsByDay,
+      viewsByPrototype,
+      uniqueViewers,
+      feedbackByCategory,
+      ratingDistribution,
+      recentViews,
+      conversionFunnel,
+    });
+  } catch (error) {
+    console.error('Get detailed analytics error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /analytics/prospects - Prospect analytics
+router.get('/analytics/prospects', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const prospects = await db('link_views')
+      .whereNotNull('prospect_email')
+      .select(
+        'prospect_email as email',
+        'prospect_name as name',
+        'prospect_company as company'
+      )
+      .count('* as viewCount')
+      .max('viewed_at as lastSeen')
+      .groupBy('prospect_email')
+      .orderBy('viewCount', 'desc');
+
+    // Get distinct prototypes viewed per prospect
+    const prospectProtoMap = {};
+
+    const protoViews = await db('link_views')
+      .whereNotNull('prospect_email')
+      .select('prospect_email', 'prototype_id')
+      .distinct();
+
+    protoViews.forEach(row => {
+      if (!prospectProtoMap[row.prospect_email]) {
+        prospectProtoMap[row.prospect_email] = [];
+      }
+      if (!prospectProtoMap[row.prospect_email].includes(row.prototype_id)) {
+        prospectProtoMap[row.prospect_email].push(row.prototype_id);
+      }
+    });
+
+    // Enrich prospects with prototype count
+    const enrichedProspects = prospects.map(prospect => ({
+      ...prospect,
+      prototypesViewed: prospectProtoMap[prospect.email] || [],
+    }));
+
+    res.json({ prospects: enrichedProspects });
+  } catch (error) {
+    console.error('Get prospect analytics error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /settings/slack - Get Slack settings
+router.get('/settings/slack', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const settings = await db('app_settings')
+      .whereIn('setting_key', ['slack_webhook_url', 'slack_events'])
+      .select('setting_key', 'setting_value');
+
+    const settingsMap = {};
+    settings.forEach(s => {
+      settingsMap[s.setting_key] = s.setting_value;
+    });
+
+    const webhookUrl = settingsMap.slack_webhook_url || '';
+    const maskedUrl = webhookUrl ? `...${webhookUrl.slice(-6)}` : '';
+    const events = settingsMap.slack_events ? JSON.parse(settingsMap.slack_events) : [];
+
+    res.json({
+      webhookUrl: maskedUrl,
+      events,
+      configured: !!webhookUrl,
+    });
+  } catch (error) {
+    console.error('Get Slack settings error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /settings/slack - Update Slack settings
+router.post('/settings/slack', authenticate, requireAdmin, [
+  body('webhookUrl').optional().isString(),
+  body('events').optional().isArray(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { webhookUrl, events } = req.body;
+
+    if (webhookUrl) {
+      await db('app_settings')
+        .where('setting_key', 'slack_webhook_url')
+        .del();
+      await db('app_settings').insert({
+        id: require('crypto').randomBytes(8).toString('hex'),
+        setting_key: 'slack_webhook_url',
+        setting_value: webhookUrl,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    }
+
+    if (events && Array.isArray(events)) {
+      await db('app_settings')
+        .where('setting_key', 'slack_events')
+        .del();
+      await db('app_settings').insert({
+        id: require('crypto').randomBytes(8).toString('hex'),
+        setting_key: 'slack_events',
+        setting_value: JSON.stringify(events),
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    }
+
+    await createAuditLog(
+      req.user.id,
+      'settings:slack-update',
+      'settings',
+      'slack',
+      { webhookUpdated: !!webhookUrl, eventsUpdated: !!events },
+      req.ip
+    );
+
+    res.json({ message: 'Slack settings updated' });
+  } catch (error) {
+    console.error('Update Slack settings error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /settings/slack/test - Test Slack notification
+router.post('/settings/slack/test', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const success = await sendSlackNotification('test', { message: 'Test notification from admin panel' });
+
+    res.json({ success });
+  } catch (error) {
+    console.error('Test Slack notification error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /settings/default-branding - Get default branding settings
+router.get('/settings/default-branding', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const setting = await db('app_settings')
+      .where('setting_key', 'default_branding')
+      .first();
+
+    const branding = setting ? JSON.parse(setting.setting_value) : null;
+
+    res.json({ branding });
+  } catch (error) {
+    console.error('Get default branding error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /settings/default-branding - Update default branding settings
+router.post('/settings/default-branding', authenticate, requireAdmin, [
+  body('branding').isObject(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { branding } = req.body;
+
+    await db('app_settings')
+      .where('setting_key', 'default_branding')
+      .del();
+
+    await db('app_settings').insert({
+      id: require('crypto').randomBytes(8).toString('hex'),
+      setting_key: 'default_branding',
+      setting_value: JSON.stringify(branding),
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await createAuditLog(
+      req.user.id,
+      'settings:branding-update',
+      'settings',
+      'default_branding',
+      branding,
+      req.ip
+    );
+
+    res.json({ message: 'Default branding updated' });
+  } catch (error) {
+    console.error('Update default branding error:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
